@@ -32,3 +32,5 @@ subsurface.pro.user*
 Subsurface.app
 .DS_Store
 !android/**/*.xml
+build*
+mobile-widgets/qml/kirigami

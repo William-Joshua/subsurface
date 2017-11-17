@@ -1,6 +1,7 @@
-#include "divecomputerextradatamodel.h"
-#include "dive.h"
-#include "metrics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/divecomputerextradatamodel.h"
+#include "core/dive.h"
+#include "core/metrics.h"
 
 
 ExtraDataModel::ExtraDataModel(QObject *parent) : CleanerTableModel(parent),
@@ -51,6 +52,7 @@ QVariant ExtraDataModel::data(const QModelIndex &index, int role) const
 
 int ExtraDataModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return rows;
 }
 

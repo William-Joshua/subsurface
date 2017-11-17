@@ -25,10 +25,20 @@
       </xsl:attribute>
 
       <xsl:attribute name="duration">
-        <xsl:call-template name="timeConvert">
-          <xsl:with-param name="timeSec" select="DIVETIMESEC"/>
-          <xsl:with-param name="units" select="$units"/>
-        </xsl:call-template>
+        <xsl:choose>
+          <xsl:when test="DIVETIMESEC != ''">
+            <xsl:call-template name="timeConvert">
+              <xsl:with-param name="timeSec" select="DIVETIMESEC"/>
+              <xsl:with-param name="units" select="$units"/>
+            </xsl:call-template>
+          </xsl:when>
+          <xsl:otherwise>
+            <xsl:call-template name="timeConvert">
+              <xsl:with-param name="timeSec" select="SAMPLECNT * SAMPLEINTERVAL"/>
+              <xsl:with-param name="units" select="$units"/>
+            </xsl:call-template>
+          </xsl:otherwise>
+        </xsl:choose>
       </xsl:attribute>
 
       <xsl:choose>
@@ -178,7 +188,36 @@
       <!-- dive sample - all the depth and temp readings -->
       <xsl:for-each select="SAMPLE">
         <xsl:choose>
-          <xsl:when test="BOOKMARK = ''">
+          <xsl:when test="BOOKMARK != ''">
+            <xsl:choose>
+              <xsl:when test="substring-before(BOOKMARK, ':') = 'Heading'">
+                <event name="heading">
+                  <xsl:attribute name="value">
+                    <xsl:value-of select="substring-before(substring-after(BOOKMARK, ': '), '°')"/>
+                  </xsl:attribute>
+                  <xsl:attribute name="time">
+                    <xsl:call-template name="timeConvert">
+                      <xsl:with-param name="timeSec" select="SAMPLETIME"/>
+                      <xsl:with-param name="units" select="'si'"/>
+                    </xsl:call-template>
+                  </xsl:attribute>
+                </event>
+              </xsl:when>
+              <xsl:otherwise>
+                <xsl:if test="BOOKMARK != 'Surface'">
+                  <event name="{BOOKMARK}">
+                    <xsl:attribute name="time">
+                      <xsl:call-template name="timeConvert">
+                        <xsl:with-param name="timeSec" select="SAMPLETIME"/>
+                        <xsl:with-param name="units" select="'si'"/>
+                      </xsl:call-template>
+                    </xsl:attribute>
+                  </event>
+                </xsl:if>
+              </xsl:otherwise>
+            </xsl:choose>
+          </xsl:when>
+          <xsl:otherwise>
             <sample>
               <xsl:attribute name="time">
                 <xsl:call-template name="timeConvert">
@@ -201,31 +240,6 @@
                 </xsl:call-template>
               </xsl:attribute>
             </sample>
-          </xsl:when>
-          <xsl:when test="substring-before(BOOKMARK, ':') = 'Heading'">
-              <event name="heading">
-                <xsl:attribute name="value">
-                  <xsl:value-of select="substring-before(substring-after(BOOKMARK, ': '), '°')"/>
-                </xsl:attribute>
-                <xsl:attribute name="time">
-                  <xsl:call-template name="timeConvert">
-                    <xsl:with-param name="timeSec" select="SAMPLETIME"/>
-                    <xsl:with-param name="units" select="'si'"/>
-                  </xsl:call-template>
-                </xsl:attribute>
-              </event>
-          </xsl:when>
-          <xsl:otherwise>
-            <xsl:if test="BOOKMARK != 'Surface'">
-              <event name="{BOOKMARK}">
-                <xsl:attribute name="time">
-                  <xsl:call-template name="timeConvert">
-                    <xsl:with-param name="timeSec" select="SAMPLETIME"/>
-                    <xsl:with-param name="units" select="'si'"/>
-                  </xsl:call-template>
-                </xsl:attribute>
-              </event>
-            </xsl:if>
           </xsl:otherwise>
         </xsl:choose>
       </xsl:for-each>

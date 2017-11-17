@@ -1,8 +1,9 @@
-#include "yearlystatisticsmodel.h"
-#include "dive.h"
-#include "helpers.h"
-#include "metrics.h"
-#include "statistics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/yearlystatisticsmodel.h"
+#include "core/dive.h"
+#include "core/helpers.h"
+#include "core/metrics.h"
+#include "core/statistics.h"
 
 class YearStatisticsItem : public TreeItem {
 public:
@@ -60,7 +61,7 @@ QVariant YearStatisticsItem::data(int column, int role) const
 		ret = stats_interval.selection_size;
 		break;
 	case TOTAL_TIME:
-		ret = get_time_string(stats_interval.total_time.seconds, 0);
+		ret = get_dive_duration_string(stats_interval.total_time.seconds, tr("h"), tr("min"), tr("sec"), " ");
 		break;
 	case AVERAGE_TIME:
 		ret = get_minutes(stats_interval.total_time.seconds / stats_interval.selection_size);
@@ -108,7 +109,7 @@ QVariant YearStatisticsItem::data(int column, int role) const
 	return ret;
 }
 
-YearlyStatisticsModel::YearlyStatisticsModel(QObject *parent)
+YearlyStatisticsModel::YearlyStatisticsModel(QObject *parent) : TreeModel(parent)
 {
 	columns = COLUMNS;
 	update_yearly_stats();
@@ -196,6 +197,20 @@ void YearlyStatisticsModel::update_yearly_stats()
 		YearStatisticsItem *item = new YearStatisticsItem(stats_by_trip[0]);
 		for (i = 1; stats_by_trip != NULL && stats_by_trip[i].is_trip; ++i) {
 			YearStatisticsItem *iChild = new YearStatisticsItem(stats_by_trip[i]);
+			item->children.append(iChild);
+			iChild->parent = item;
+		}
+		rootItem->children.append(item);
+		item->parent = rootItem;
+	}
+
+	/* Show the statistic sorted by dive type */
+	if (stats_by_type != NULL && stats_by_type[0].selection_size) {
+		YearStatisticsItem *item = new YearStatisticsItem(stats_by_type[0]);
+		for (i = 1; i <= NUM_DC_TYPE; ++i) {
+			if (stats_by_type[i].selection_size == 0)
+				continue;
+			YearStatisticsItem *iChild = new YearStatisticsItem(stats_by_type[i]);
 			item->children.append(iChild);
 			iChild->parent = item;
 		}

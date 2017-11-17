@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * mainwindow.h
  *
@@ -14,21 +15,15 @@
 #include <QProgressDialog>
 
 #include "ui_mainwindow.h"
-#include "notificationwidget.h"
-#include "windowtitleupdate.h"
+#include "desktop-widgets/notificationwidget.h"
+#include "core/windowtitleupdate.h"
+#include "core/gpslocation.h"
 
-struct DiveList;
 class QSortFilterProxyModel;
 class DiveTripModel;
-
-class DiveInfo;
-class DiveNotes;
-class Stats;
-class Equipment;
 class QItemSelection;
 class DiveListView;
 class MainTab;
-class ProfileGraphicsView;
 class QWebView;
 class QSettings;
 class UpdateManager;
@@ -58,7 +53,7 @@ public:
 
 	enum CurrentState {
 		VIEWALL,
-		GLOBE_MAXIMIZED,
+		MAP_MAXIMIZED,
 		INFO_MAXIMIZED,
 		PROFILE_MAXIMIZED,
 		LIST_MAXIMIZED
@@ -92,7 +87,12 @@ public:
 	QUndoStack *undoStack;
 	NotificationWidget *getNotificationWidget();
 	void enableDisableCloudActions();
-	void showError();
+	void setCheckedActionFilterTags(bool checked);
+
+	// Shows errors that have accumulated.
+	// Must be called from GUI thread.
+	void showErrors();
+
 private
 slots:
 	/* file menu action */
@@ -104,6 +104,7 @@ slots:
 	void on_actionClose_triggered();
 	void on_actionCloudstorageopen_triggered();
 	void on_actionCloudstoragesave_triggered();
+	void on_actionTake_cloud_storage_online_triggered();
 	void on_actionPrint_triggered();
 	void on_actionPreferences_triggered();
 	void on_actionQuit_triggered();
@@ -124,7 +125,7 @@ slots:
 	void on_actionViewList_triggered();
 	void on_actionViewProfile_triggered();
 	void on_actionViewInfo_triggered();
-	void on_actionViewGlobe_triggered();
+	void on_actionViewMap_triggered();
 	void on_actionViewAll_triggered();
 	void on_actionPreviousDC_triggered();
 	void on_actionNextDC_triggered();
@@ -145,23 +146,6 @@ slots:
 	void on_actionImportDiveLog_triggered();
 
 	/* TODO: Move those slots below to it's own class */
-	void on_profCalcAllTissues_triggered(bool triggered);
-	void on_profCalcCeiling_triggered(bool triggered);
-	void on_profDcCeiling_triggered(bool triggered);
-	void on_profEad_triggered(bool triggered);
-	void on_profIncrement3m_triggered(bool triggered);
-	void on_profMod_triggered(bool triggered);
-	void on_profNdl_tts_triggered(bool triggered);
-	void on_profPO2_triggered(bool triggered);
-	void on_profPhe_triggered(bool triggered);
-	void on_profPn2_triggered(bool triggered);
-	void on_profHR_triggered(bool triggered);
-	void on_profRuler_triggered(bool triggered);
-	void on_profSAC_triggered(bool triggered);
-	void on_profScaled_triggered(bool triggered);
-	void on_profTogglePicture_triggered(bool triggered);
-	void on_profTankbar_triggered(bool triggered);
-	void on_profTissues_triggered(bool triggered);
 	void on_actionExport_triggered();
 	void on_copy_triggered();
 	void on_paste_triggered();
@@ -197,13 +181,17 @@ slots:
 
 	void socialNetworkRequestConnect();
 	void socialNetworkRequestUpload();
+	void facebookLoggedIn();
+	void facebookLoggedOut();
+
 private:
 	Ui::MainWindow ui;
 	QAction *actionNextDive;
 	QAction *actionPreviousDive;
 	UserManual *helpView;
 	CurrentState state;
-	QString filter();
+	QString filter_open();
+	QString filter_import();
 	static MainWindow *m_Instance;
 	QString displayedFilename(QString fullFilename);
 	bool askSaveChanges();
@@ -254,6 +242,9 @@ private:
 	QHash<QByteArray, PropertiesForQuadrant> stateProperties;
 
 	WindowTitleUpdate *wtu;
+	GpsLocation *locationProvider;
+	QMenu *connections;
+	QAction *share_on_fb;
 };
 
 #endif // MAINWINDOW_H

@@ -1,13 +1,15 @@
-#include "divecartesianaxis.h"
-#include "divetextitem.h"
-#include "helpers.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "profile-widget/divecartesianaxis.h"
+#include "profile-widget/divetextitem.h"
+#include "core/helpers.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 #ifndef SUBSURFACE_MOBILE
-#include "preferences/preferencesdialog.h"
+#include "desktop-widgets/preferences/preferencesdialog.h"
 #endif
-#include "diveplotdatamodel.h"
-#include "animationfunctions.h"
-#include "divelineitem.h"
-#include "profilewidget2.h"
+#include "qt-models/diveplotdatamodel.h"
+#include "profile-widget/animationfunctions.h"
+#include "profile-widget/divelineitem.h"
+#include "profile-widget/profilewidget2.h"
 
 QPen DiveCartesianAxis::gridPen()
 {
@@ -108,6 +110,7 @@ void DiveCartesianAxis::setOrientation(Orientation o)
 
 QColor DiveCartesianAxis::colorForValue(double value)
 {
+	Q_UNUSED(value)
 	return QColor(Qt::black);
 }
 
@@ -367,7 +370,7 @@ QString DepthAxis::textForValue(double value)
 {
 	if (value == 0)
 		return QString();
-	return get_depth_string(value, false, false);
+	return get_depth_string(lrint(value), false, false);
 }
 
 QColor DepthAxis::colorForValue(double value)
@@ -407,15 +410,15 @@ QColor TimeAxis::colorForValue(double value)
 
 QString TimeAxis::textForValue(double value)
 {
-	int nr = value / 60;
+	int nr = lrint(value) / 60;
 	if (maximum() < 600)
 		return QString("%1:%2").arg(nr).arg((int)value % 60, 2, 10, QChar('0'));
 	return QString::number(nr);
 }
 
-void TimeAxis::updateTicks()
+void TimeAxis::updateTicks(color_indice_t color)
 {
-	DiveCartesianAxis::updateTicks();
+	DiveCartesianAxis::updateTicks(color);
 	if (maximum() > 600) {
 		for (int i = 0; i < labels.count(); i++) {
 			labels[i]->setVisible(i % 2);

@@ -1,6 +1,7 @@
-#include "undocommands.h"
-#include "mainwindow.h"
-#include "divelist.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/undocommands.h"
+#include "desktop-widgets/mainwindow.h"
+#include "core/divelist.h"
 
 UndoDeleteDive::UndoDeleteDive(QList<dive *> deletedDives) : diveList(deletedDives)
 {

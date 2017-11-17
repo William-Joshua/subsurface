@@ -1,5 +1,6 @@
-#include "treemodel.h"
-#include "metrics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/treemodel.h"
+#include "core/metrics.h"
 
 TreeItem::TreeItem()
 {
@@ -13,6 +14,7 @@ TreeItem::~TreeItem()
 
 Qt::ItemFlags TreeItem::flags(const QModelIndex &index) const
 {
+	Q_UNUSED(index);
 	return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
@@ -25,6 +27,8 @@ int TreeItem::row() const
 
 QVariant TreeItem::data(int column, int role) const
 {
+	Q_UNUSED(column);
+	Q_UNUSED(role);
 	return QVariant();
 }
 
@@ -55,6 +59,9 @@ QVariant TreeModel::data(const QModelIndex &index, int role) const
 
 bool TreeItem::setData(const QModelIndex &index, const QVariant &value, int role)
 {
+	Q_UNUSED(index);
+	Q_UNUSED(value);
+	Q_UNUSED(role);
 	return false;
 }
 
@@ -99,5 +106,6 @@ int TreeModel::rowCount(const QModelIndex &parent) const
 
 int TreeModel::columnCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return columns;
 }

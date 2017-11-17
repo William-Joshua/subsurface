@@ -1,8 +1,9 @@
-#include "diveplotdatamodel.h"
-#include "dive.h"
-#include "profile.h"
-#include "divelist.h"
-#include "subsurface-core/color.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/diveplotdatamodel.h"
+#include "core/dive.h"
+#include "core/profile.h"
+#include "core/divelist.h"
+#include "core/color.h"
 
 DivePlotDataModel::DivePlotDataModel(QObject *parent) :
 	QAbstractTableModel(parent),
@@ -14,12 +15,13 @@ DivePlotDataModel::DivePlotDataModel(QObject *parent) :
 
 int DivePlotDataModel::columnCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return COLUMNS;
 }
 
 QVariant DivePlotDataModel::data(const QModelIndex &index, int role) const
 {
-	if ((!index.isValid()) || (index.row() >= pInfo.nr))
+	if ((!index.isValid()) || (index.row() >= pInfo.nr) || pInfo.entry == 0)
 		return QVariant();
 
 	plot_data item = pInfo.entry[index.row()];
@@ -30,19 +32,17 @@ QVariant DivePlotDataModel::data(const QModelIndex &index, int role) const
 		case TIME:
 			return item.sec;
 		case PRESSURE:
-			return item.pressure[0];
+			return item.pressure[0][0];
 		case TEMPERATURE:
 			return item.temperature;
 		case COLOR:
 			return item.velocity;
 		case USERENTERED:
 			return false;
-		case CYLINDERINDEX:
-			return item.cylinderindex;
 		case SENSOR_PRESSURE:
-			return item.pressure[0];
+			return item.pressure[0][0];
 		case INTERPOLATED_PRESSURE:
-			return item.pressure[1];
+			return item.pressure[0][1];
 		case CEILING:
 			return item.ceiling;
 		case SAC:
@@ -96,6 +96,7 @@ const plot_info &DivePlotDataModel::data() const
 
 int DivePlotDataModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return pInfo.nr;
 }
 
@@ -120,8 +121,6 @@ QVariant DivePlotDataModel::headerData(int section, Qt::Orientation orientation,
 		return tr("Color");
 	case USERENTERED:
 		return tr("User entered");
-	case CYLINDERINDEX:
-		return tr("Cylinder index");
 	case SENSOR_PRESSURE:
 		return tr("Pressure S");
 	case INTERPOLATED_PRESSURE:
@@ -167,6 +166,8 @@ void DivePlotDataModel::clear()
 	if (rowCount() != 0) {
 		beginRemoveRows(QModelIndex(), 0, rowCount() - 1);
 		pInfo.nr = 0;
+		free(pInfo.entry);
+		pInfo.entry = 0;
 		diveId = -1;
 		dcNr = -1;
 		endRemoveRows();
@@ -179,7 +180,10 @@ void DivePlotDataModel::setDive(dive *d, const plot_info &info)
 	Q_ASSERT(d != NULL);
 	diveId = d->id;
 	dcNr = dc_number;
+	free(pInfo.entry);
 	pInfo = info;
+	pInfo.entry = (struct plot_data *)malloc(sizeof(struct plot_data) * pInfo.nr);
+	memcpy(pInfo.entry, info.entry, sizeof(plot_data) * pInfo.nr);
 	beginInsertRows(QModelIndex(), 0, pInfo.nr - 1);
 	endInsertRows();
 }
@@ -223,6 +227,7 @@ void DivePlotDataModel::emitDataChanged()
 	emit dataChanged(QModelIndex(), QModelIndex());
 }
 
+#ifndef SUBSURFACE_MOBILE
 void DivePlotDataModel::calculateDecompression()
 {
 	struct divecomputer *dc = select_dc(&displayed_dive);
@@ -230,3 +235,4 @@ void DivePlotDataModel::calculateDecompression()
 	calculate_deco_information(&displayed_dive, dc, &pInfo, false);
 	dataChanged(index(0, CEILING), index(pInfo.nr - 1, TISSUE_16));
 }
+#endif

@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVELOCATIONMODEL_H
 #define DIVELOCATIONMODEL_H
 
 #include <QAbstractTableModel>
 #include <QStringListModel>
 #include <stdint.h>
-
+#include "core/units.h"
 #include "ssrfsortfilterproxymodel.h"
 
 class QLineEdit;

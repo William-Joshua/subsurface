@@ -2,8 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.subsurfacedivelog"
     android:installLocation="auto"
-    android:versionCode="1"
-    android:versionName="1.0" >
+    android:versionCode=@BUILD_NR@
+    android:versionName=@SUBSURFACE_VERSION@ >
 
     <application
         android:name="org.qtproject.qt5.android.bindings.QtApplication"
@@ -63,18 +63,6 @@
             <meta-data
                 android:name="android.app.static_init_classes"
                 android:value="-- %%INSERT_INIT_CLASSES%% --" />
-            <!-- Messages maps -->
-            <meta-data
-                android:name="android.app.ministro_not_found_msg"
-                android:value="@string/ministro_not_found_msg" />
-            <meta-data
-                android:name="android.app.ministro_needed_msg"
-                android:value="@string/ministro_needed_msg" />
-            <meta-data
-                android:name="android.app.fatal_error_msg"
-                android:value="@string/fatal_error_msg" />
-            <!-- Messages maps -->
-
 
             <!-- Splash screen -->
             <!--
@@ -91,7 +79,7 @@
         </activity>
     </application>
 
-    <uses-sdk android:minSdkVersion="12" />
+    <uses-sdk android:minSdkVersion="16" />
 
     <supports-screens
         android:anyDensity="true"

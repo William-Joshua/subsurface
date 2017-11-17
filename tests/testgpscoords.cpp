@@ -1,4 +1,5 @@
-#include <dive.h>
+// SPDX-License-Identifier: GPL-2.0
+#include "core/dive.h"
 #include "testgpscoords.h"
 
 //unit under test
@@ -127,4 +128,4 @@ double TestGpsCoords::coord2double(double deg, double min, double sec)
 	return deg + min / 60.0 + sec / 3600.0;
 }
 
-QTEST_MAIN(TestGpsCoords)
+QTEST_GUILESS_MAIN(TestGpsCoords)

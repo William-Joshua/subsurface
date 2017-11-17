@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef CYLINDERMODEL_H
 #define CYLINDERMODEL_H
 
 #include "cleanertablemodel.h"
-#include "dive.h"
+#include "core/dive.h"
 
 /* Encapsulation of the Cylinder Model, that presents the
  * Current cylinders that are used on a dive. */
@@ -19,6 +20,8 @@ public:
 		O2,
 		HE,
 		DEPTH,
+		MOD,
+		MND,
 		USE,
 		COLUMNS
 	};
@@ -35,12 +38,17 @@ public:
 	void clear();
 	void updateDive();
 	void copyFromDive(struct dive *d);
+	void updateDecoDepths(pressure_t olddecopo2);
+	void updateTrashIcon();
+	void moveAtFirst(int cylid);
 	cylinder_t *cylinderAt(const QModelIndex &index);
 	bool changed;
+	virtual QVariant headerData(int section, Qt::Orientation orientation, int role) const;
 
 public
 slots:
 	void remove(const QModelIndex &index);
+	bool updateBestMixes();
 
 private:
 	int rows;

@@ -1,7 +1,8 @@
-#include "tankinfomodel.h"
-#include "dive.h"
-#include "gettextfromc.h"
-#include "metrics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/tankinfomodel.h"
+#include "core/dive.h"
+#include "core/gettextfromc.h"
+#include "core/metrics.h"
 
 TankInfoModel *TankInfoModel::instance()
 {
@@ -16,6 +17,7 @@ const QString &TankInfoModel::biggerString() const
 
 bool TankInfoModel::insertRows(int row, int count, const QModelIndex &parent)
 {
+	Q_UNUSED(row);
 	beginInsertRows(parent, rowCount(), rowCount());
 	rows += count;
 	endInsertRows();
@@ -24,6 +26,12 @@ bool TankInfoModel::insertRows(int row, int count, const QModelIndex &parent)
 
 bool TankInfoModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
+	//WARN Seems wrong, we need to check for role == Qt::EditRole
+	Q_UNUSED(role);
+
+	if (index.row() < 0 || index.row() > MAX_TANK_INFO - 1)
+		return false;
+
 	struct tank_info_t *info = &tank_info[index.row()];
 	switch (index.column()) {
 	case DESCRIPTION:
@@ -47,7 +55,7 @@ void TankInfoModel::clear()
 QVariant TankInfoModel::data(const QModelIndex &index, int role) const
 {
 	QVariant ret;
-	if (!index.isValid()) {
+	if (!index.isValid() || index.row() < 0 || index.row() > MAX_TANK_INFO - 1) {
 		return ret;
 	}
 	if (role == Qt::FontRole) {
@@ -59,7 +67,7 @@ QVariant TankInfoModel::data(const QModelIndex &index, int role) const
 		double bar = (info->psi) ? psi_to_bar(info->psi) : info->bar;
 
 		if (info->cuft && info->psi)
-			ml = cuft_to_l(info->cuft) * 1000 / bar_to_atm(bar);
+			ml = lrint(cuft_to_l(info->cuft) * 1000 / bar_to_atm(bar));
 
 		switch (index.column()) {
 		case BAR:
@@ -78,6 +86,7 @@ QVariant TankInfoModel::data(const QModelIndex &index, int role) const
 
 int TankInfoModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return rows + 1;
 }
 

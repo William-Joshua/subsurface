@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "facebook_integration.h"
 #include "facebookconnectwidget.h"
 
 #include <QDebug>
 
 FacebookPlugin::FacebookPlugin(QObject* parent) :
-	fbConnectWidget(new FacebookConnectWidget()),
-	fbUploadDialog(new SocialNetworkDialog())
+	fbConnectWidget(new FacebookConnectWidget())
 {
+	Q_UNUSED(parent)
 }
 
 bool FacebookPlugin::isConnected()
@@ -39,5 +40,5 @@ void FacebookPlugin::requestUpload()
 {
 	FacebookManager *instance = FacebookManager::instance();
 	if (instance->loggedIn())
-		fbUploadDialog->exec();
+		instance->sendDiveInit();
 }

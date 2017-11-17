@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * divelistview.h
  *
@@ -14,13 +15,14 @@
 #include <QTreeView>
 #include <QLineEdit>
 #include <QNetworkAccessManager>
-#include "divetripmodel.h"
+#include "qt-models/divetripmodel.h"
 
 class DiveListView : public QTreeView {
 	Q_OBJECT
 public:
 	DiveListView(QWidget *parent = 0);
 	~DiveListView();
+	void mouseDoubleClickEvent(QMouseEvent * event);
 	void selectionChanged(const QItemSelection &selected, const QItemSelection &deselected);
 	void currentChanged(const QModelIndex &current, const QModelIndex &previous);
 	void reload(DiveTripModel::Layout layout, bool forceSort = true);
@@ -68,6 +70,7 @@ private:
 	QModelIndex contextMenuIndex;
 	bool dontEmitDiveChangedSignal;
 	bool selectionSaved;
+	DiveTripModel *tripModel;
 
 	/* if dive_trip_t is null, there's no problem. */
 	QMultiHash<dive_trip_t *, int> selectedDives;

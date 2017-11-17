@@ -1,37 +1,32 @@
-#include "updatemanager.h"
-#include "helpers.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/updatemanager.h"
+#include "core/helpers.h"
+#include "core/qthelper.h"
 #include <QtNetwork>
 #include <QMessageBox>
 #include <QUuid>
-#include "subsurfacewebservices.h"
-#include "version.h"
-#include "mainwindow.h"
+#include "desktop-widgets/subsurfacewebservices.h"
+#include "core/version.h"
+#include "desktop-widgets/mainwindow.h"
+#include "core/cloudstorage.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 
 UpdateManager::UpdateManager(QObject *parent) :
 	QObject(parent),
 	isAutomaticCheck(false)
 {
-	// is this the first time this version was run?
-	QSettings settings;
-	settings.beginGroup("UpdateManager");
-	if (settings.contains("DontCheckForUpdates") && settings.value("DontCheckForUpdates") == "TRUE")
+	auto update_settings = SettingsObjectWrapper::instance()->update_manager_settings;
+
+	if (update_settings->dontCheckForUpdates())
 		return;
-	if (settings.contains("LastVersionUsed")) {
-		// we have checked at least once before
-		if (settings.value("LastVersionUsed").toString() != subsurface_git_version()) {
-			// we have just updated - wait two weeks before you check again
-			settings.setValue("LastVersionUsed", QString(subsurface_git_version()));
-			settings.setValue("NextCheck", QDateTime::currentDateTime().addDays(14).toString(Qt::ISODate));
-		} else {
-			// is it time to check again?
-			QString nextCheckString = settings.value("NextCheck").toString();
-			QDateTime nextCheck = QDateTime::fromString(nextCheckString, Qt::ISODate);
-			if (nextCheck > QDateTime::currentDateTime())
-				return;
-		}
-	}
-	settings.setValue("LastVersionUsed", QString(subsurface_git_version()));
-	settings.setValue("NextCheck", QDateTime::currentDateTime().addDays(14).toString(Qt::ISODate));
+
+	if (update_settings->lastVersionUsed() == subsurface_git_version() &&
+	    update_settings->nextCheck() > QDate::currentDate())
+		return;
+
+	update_settings->setLastVersionUsed(subsurface_git_version());
+	update_settings->setNextCheck(QDate::currentDate().addDays(14));
+
 	checkForUpdates(true);
 }
 
@@ -57,23 +52,7 @@ void UpdateManager::checkForUpdates(bool automatic)
 	request.setRawHeader("Accept", "text/xml");
 	QString userAgent = getUserAgent();
 	request.setRawHeader("User-Agent", userAgent.toUtf8());
-	connect(SubsurfaceWebServices::manager()->get(request), SIGNAL(finished()), this, SLOT(requestReceived()), Qt::UniqueConnection);
-}
-
-QString UpdateManager::getUUID()
-{
-	QString uuidString;
-	QSettings settings;
-	settings.beginGroup("UpdateManager");
-	if (settings.contains("UUID")) {
-		uuidString = settings.value("UUID").toString();
-	} else {
-		QUuid uuid = QUuid::createUuid();
-		uuidString = uuid.toString();
-		settings.setValue("UUID", uuidString);
-	}
-	uuidString.replace("{", "").replace("}", "");
-	return uuidString;
+	connect(manager()->get(request), SIGNAL(finished()), this, SLOT(requestReceived()), Qt::UniqueConnection);
 }
 
 void UpdateManager::requestReceived()
@@ -131,23 +110,20 @@ void UpdateManager::requestReceived()
 		msgbox.exec();
 	}
 	if (isAutomaticCheck) {
-		QSettings settings;
-		settings.beginGroup("UpdateManager");
-		if (!settings.contains("DontCheckForUpdates")) {
+		auto update_settings = SettingsObjectWrapper::instance()->update_manager_settings;
+		if (!update_settings->dontCheckExists()) {
+
 			// we allow an opt out of future checks
 			QMessageBox response(MainWindow::instance());
-			QString message = tr("Subsurface is checking every two weeks if a new version is available. If you don't want Subsurface to continue checking, please click Decline.");
+			QString message = tr("Subsurface is checking every two weeks if a new version is available. "
+								 "\nIf you don't want Subsurface to continue checking, please click Decline.");
 			response.addButton(tr("Decline"), QMessageBox::RejectRole);
 			response.addButton(tr("Accept"), QMessageBox::AcceptRole);
 			response.setText(message);
 			response.setWindowTitle(tr("Automatic check for updates"));
 			response.setIcon(QMessageBox::Question);
 			response.setWindowModality(Qt::WindowModal);
-			int ret = response.exec();
-			if (ret == QMessageBox::Accepted)
-				settings.setValue("DontCheckForUpdates", "FALSE");
-			else
-				settings.setValue("DontCheckForUpdates", "TRUE");
+			update_settings->setDontCheckForUpdates(response.exec() != QMessageBox::Accepted);
 		}
 	}
 #endif

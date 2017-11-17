@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # start from the directory above the combined subsurface & subsurface/libdivecomputer directory
 #
 # in order to be able to make changes to the debian/* files without changing the source
@@ -38,7 +38,7 @@ if [[ ! -d subsurface_$VERSION ]]; then
 	#
 	(cd subsurface ; tar cf - . ) | (cd subsurface_$VERSION ; tar xf - )
 	cd subsurface_$VERSION;
-	rm -rf .git libdivecomputer/.git libgit2/.git marble-source/.git
+	rm -rf .git libdivecomputer/.git libgit2/.git
 	echo $GITVERSION > .gitversion
 	echo $LIBDCREVISION > libdivecomputer/revision
 	# dh_make --email dirk@hohndel.org -c gpl2 --createorig --single --yes -p subsurface_$VERSION
@@ -81,23 +81,15 @@ cp debian/changelog ~/src/debian.changelog
 
 debuild -S
 
-# and now for utopic
-prev=trusty
-rel=utopic
-sed -i "s/${prev}/${rel}/g" debian/changelog
-debuild -S
-
-# and now for vivid
-prev=utopic
-rel=vivid
-sed -i "s/${prev}/${rel}/g" debian/changelog
-debuild -S
-
-# and now for wily
-prev=vivid
-rel=wily
-sed -i "s/${prev}/${rel}/g" debian/changelog
-debuild -S
+#create builds for the newer Ubuntu releases that Launchpad supports
+rel=trusty
+others="vivid wily xenial yakkety"
+for next in $others
+do
+	sed -i "s/${rel}/${next}/g" debian/changelog
+	debuild -S
+	rel=$next
+done
 
 # and now for precise (precise can't build Qt5 based packages)
 # with the switch to cmake the amount of effort to build Qt4 packages

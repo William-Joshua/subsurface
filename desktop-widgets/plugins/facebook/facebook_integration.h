@@ -1,7 +1,8 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef FACEBOOK_INTEGRATION_H
 #define FACEBOOK_INTEGRATION_H
 
-#include "subsurface-core/isocialnetworkintegration.h"
+#include "core/isocialnetworkintegration.h"
 #include <QString>
 
 class FacebookConnectWidget;

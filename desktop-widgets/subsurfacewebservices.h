@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef SUBSURFACEWEBSERVICES_H
 #define SUBSURFACEWEBSERVICES_H
 
@@ -19,8 +20,6 @@ public:
 	void hidePassword();
 	void hideUpload();
 	void hideDownload();
-
-	static QNetworkAccessManager *manager();
 
 private
 slots:
@@ -108,26 +107,7 @@ slots:
 	// need to declare them as no ops or Qt4 is unhappy
 	virtual void startDownload() { }
 	virtual void startUpload() { }
-	virtual void buttonClicked(QAbstractButton *button) { }
-};
-
-class CloudStorageAuthenticate : public QObject {
-	Q_OBJECT
-public:
-	QNetworkReply* backend(QString email, QString password, QString pin = "", QString newpasswd = "");
-	explicit CloudStorageAuthenticate(QObject *parent);
-signals:
-	void finishedAuthenticate();
-	void passwordChangeSuccessful();
-private
-slots:
-	void uploadError(QNetworkReply::NetworkError error);
-	void sslErrors(QList<QSslError> errorList);
-	void uploadFinished();
-private:
-	QNetworkReply *reply;
-	QString userAgent;
-
+	virtual void buttonClicked(QAbstractButton *button) { Q_UNUSED(button) }
 };
 
 #ifdef __cplusplus

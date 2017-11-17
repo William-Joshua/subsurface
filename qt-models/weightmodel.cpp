@@ -1,9 +1,10 @@
-#include "weightmodel.h"
-#include "dive.h"
-#include "gettextfromc.h"
-#include "metrics.h"
-#include "helpers.h"
-#include "weigthsysteminfomodel.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/weightmodel.h"
+#include "core/dive.h"
+#include "core/gettextfromc.h"
+#include "core/metrics.h"
+#include "core/helpers.h"
+#include "qt-models/weigthsysteminfomodel.h"
 
 WeightModel::WeightModel(QObject *parent) : CleanerTableModel(parent),
 	changed(false),
@@ -143,6 +144,7 @@ Qt::ItemFlags WeightModel::flags(const QModelIndex &index) const
 
 int WeightModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return rows;
 }
 

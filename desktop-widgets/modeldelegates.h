@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef MODELDELEGATES_H
 #define MODELDELEGATES_H
 
@@ -30,7 +31,7 @@ private:
 class ComboBoxDelegate : public QStyledItemDelegate {
 	Q_OBJECT
 public:
-	explicit ComboBoxDelegate(QAbstractItemModel *model, QObject *parent = 0);
+	explicit ComboBoxDelegate(QAbstractItemModel *model, QObject *parent = 0, bool allowEdit = true);
 	virtual QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const;
 	virtual void setEditorData(QWidget *editor, const QModelIndex &index) const;
 	virtual void updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const;
@@ -43,7 +44,8 @@ slots:
 	void fakeActivation();
 	void fixTabBehavior();
 	virtual void revertModelData(QWidget *widget, QAbstractItemDelegate::EndEditHint hint) = 0;
-
+private:
+	bool editable;
 protected:
 	QAbstractItemModel *model;
 };
@@ -90,16 +92,6 @@ slots:
 	void revertModelData(QWidget *widget, QAbstractItemDelegate::EndEditHint hint);
 };
 
-/* ProfilePrintDelagate:
- * this delegate is used to modify the look of the table that is printed
- * bellow profiles.
- */
-class ProfilePrintDelegate : public QStyledItemDelegate {
-public:
-	explicit ProfilePrintDelegate(QObject *parent = 0);
-	void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-};
-
 class SpinBoxDelegate : public QStyledItemDelegate {
 	Q_OBJECT
 public:
@@ -120,14 +112,6 @@ private:
 	double min;
 	double max;
 	double step;
-};
-
-class HTMLDelegate : public ProfilePrintDelegate {
-	Q_OBJECT
-public:
-	explicit HTMLDelegate(QObject *parent = 0);
-	virtual void paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const;
-	virtual QSize sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const;
 };
 
 class LocationFilterDelegate : public QStyledItemDelegate {

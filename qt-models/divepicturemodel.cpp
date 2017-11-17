@@ -1,8 +1,9 @@
-#include "divepicturemodel.h"
-#include "dive.h"
-#include "metrics.h"
-#include "divelist.h"
-#include "imagedownloader.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/divepicturemodel.h"
+#include "core/dive.h"
+#include "core/metrics.h"
+#include "core/divelist.h"
+#include "core/imagedownloader.h"
 
 #include <QtConcurrent>
 
@@ -78,6 +79,7 @@ void DivePictureModel::updateDivePictures()
 
 int DivePictureModel::columnCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return 2;
 }
 
@@ -126,5 +128,6 @@ void DivePictureModel::removePicture(const QString &fileUrl, bool last)
 
 int DivePictureModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return numberOfPictures;
 }

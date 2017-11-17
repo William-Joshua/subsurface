@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "preferencesdialog.h"
 
 #include "abstractpreferenceswidget.h"
@@ -8,7 +9,7 @@
 #include "preferences_graph.h"
 #include "preferences_network.h"
 
-#include "subsurface-core/qthelper.h"
+#include "core/qthelper.h"
 
 #include <QVBoxLayout>
 #include <QHBoxLayout>
@@ -16,7 +17,6 @@
 #include <QStackedWidget>
 #include <QDialogButtonBox>
 #include <QAbstractButton>
-#include <QSettings>
 #include <QDebug>
 
 PreferencesDialog* PreferencesDialog::instance()
@@ -27,18 +27,18 @@ PreferencesDialog* PreferencesDialog::instance()
 
 void PreferencesDialog::emitSettingsChanged()
 {
-  emit settingsChanged();
+	emit settingsChanged();
 }
 
 PreferencesDialog::PreferencesDialog()
 {
-	loadPreferences(); //TODO: Move this code out of the qthelper.cpp
+	//FIXME: This looks wrong.
+	//QSettings s;
+	//s.beginGroup("GeneralSettings");
+	//s.setValue("default_directory", system_default_directory());
+	//s.endGroup();
 
-	QSettings s;
-	s.beginGroup("GeneralSettings");
-	s.setValue("default_directory", system_default_directory());
-	s.endGroup();
-
+	setWindowIcon(QIcon(":subsurface-icon"));
 	pagesList = new QListWidget();
 	pagesStack = new QStackedWidget();
 	buttonBox = new QDialogButtonBox(
@@ -121,6 +121,7 @@ void PreferencesDialog::refreshPages()
 void PreferencesDialog::applyRequested(bool closeIt)
 {
 	Q_FOREACH(AbstractPreferencesWidget *page, pages) {
+		connect(page, &AbstractPreferencesWidget::settingsChanged, this, &PreferencesDialog::settingsChanged, Qt::UniqueConnection);
 		page->syncSettings();
 	}
 	emit settingsChanged();

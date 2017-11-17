@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "testprofile.h"
-#include "dive.h"
+#include "core/dive.h"
 
 void TestProfile::testRedCeiling()
 {
 	parse_file("../dives/deep.xml");
 }
 
-QTEST_MAIN(TestProfile)
+QTEST_GUILESS_MAIN(TestProfile)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "printdialog.h"
 #include "printoptions.h"
 #include "mainwindow.h"
@@ -14,7 +15,10 @@
 
 template_options::color_palette_struct ssrf_colors, almond_colors, blueshades_colors, custom_colors;
 
-PrintDialog::PrintDialog(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f)
+PrintDialog::PrintDialog(QWidget *parent, Qt::WindowFlags f) :
+	QDialog(parent, f),
+	printer(NULL),
+	qprinter(NULL)
 {
 	// initialize const colors
 	ssrf_colors.color1 = QColor::fromRgb(0xff, 0xff, 0xff);
@@ -38,36 +42,23 @@ PrintDialog::PrintDialog(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f
 
 	// check if the options were previously stored in the settings; if not use some defaults.
 	QSettings s;
-	bool stored = s.childGroups().contains(SETTINGS_GROUP);
-	if (!stored) {
-		printOptions.print_selected = true;
-		printOptions.color_selected = true;
-		printOptions.landscape = false;
-		printOptions.p_template = "one_dive.html";
-		printOptions.type = print_options::DIVELIST;
-		templateOptions.font_index = 0;
-		templateOptions.font_size = 9;
-		templateOptions.color_palette_index = SSRF_COLORS;
-		templateOptions.line_spacing = 1;
-		custom_colors = ssrf_colors;
-	} else {
-		s.beginGroup(SETTINGS_GROUP);
-		printOptions.type = (print_options::print_type)s.value("type").toInt();
-		printOptions.print_selected = s.value("print_selected").toBool();
-		printOptions.color_selected = s.value("color_selected").toBool();
-		printOptions.landscape = s.value("landscape").toBool();
-		printOptions.p_template = s.value("template_selected").toString();
-		qprinter.setOrientation((QPrinter::Orientation)printOptions.landscape);
-		templateOptions.font_index = s.value("font").toInt();
-		templateOptions.font_size = s.value("font_size").toDouble();
-		templateOptions.color_palette_index = s.value("color_palette").toInt();
-		templateOptions.line_spacing = s.value("line_spacing").toDouble();
-		custom_colors.color1 = QColor(s.value("custom_color_1").toString());
-		custom_colors.color2 = QColor(s.value("custom_color_2").toString());
-		custom_colors.color3 = QColor(s.value("custom_color_3").toString());
-		custom_colors.color4 = QColor(s.value("custom_color_4").toString());
-		custom_colors.color5 = QColor(s.value("custom_color_5").toString());
-	}
+	s.beginGroup(SETTINGS_GROUP);
+	printOptions.type = (print_options::print_type)s.value("type", print_options::DIVELIST).toInt();
+	printOptions.print_selected = s.value("print_selected", true).toBool();
+	printOptions.color_selected = s.value("color_selected", true).toBool();
+	printOptions.landscape = s.value("landscape", false).toBool();
+	printOptions.p_template = s.value("template_selected", "one_dive.html").toString();
+	templateOptions.font_index = s.value("font", 0).toInt();
+	templateOptions.font_size = s.value("font_size", 9).toDouble();
+	templateOptions.color_palette_index = s.value("color_palette", SSRF_COLORS).toInt();
+	templateOptions.line_spacing = s.value("line_spacing", 1).toDouble();
+	templateOptions.border_width = s.value("border_width", 1).toInt();
+	custom_colors.color1 = QColor(s.value("custom_color_1", ssrf_colors.color1).toString());
+	custom_colors.color2 = QColor(s.value("custom_color_2", ssrf_colors.color2).toString());
+	custom_colors.color3 = QColor(s.value("custom_color_3", ssrf_colors.color3).toString());
+	custom_colors.color4 = QColor(s.value("custom_color_4", ssrf_colors.color4).toString());
+	custom_colors.color5 = QColor(s.value("custom_color_5", ssrf_colors.color5).toString());
+	s.endGroup();
 
 	// handle cases from old QSettings group
 	if (templateOptions.font_size < 9) {
@@ -94,9 +85,6 @@ PrintDialog::PrintDialog(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f
 
 	// create a print options object and pass our options struct
 	optionsWidget = new PrintOptions(this, &printOptions, &templateOptions);
-
-	// create a new printer object
-	printer = new Printer(&qprinter, &printOptions, &templateOptions, Printer::PRINT);
 
 	QVBoxLayout *layout = new QVBoxLayout(this);
 	setLayout(layout);
@@ -140,6 +128,12 @@ PrintDialog::PrintDialog(QWidget *parent, Qt::WindowFlags f) : QDialog(parent, f
 	connect(this, SIGNAL(finished(int)), this, SLOT(onFinished()));
 }
 
+PrintDialog::~PrintDialog()
+{
+	delete qprinter;
+	delete printer;
+}
+
 void PrintDialog::onFinished()
 {
 	QSettings s;
@@ -156,6 +150,7 @@ void PrintDialog::onFinished()
 	s.setValue("font_size", templateOptions.font_size);
 	s.setValue("color_palette", templateOptions.color_palette_index);
 	s.setValue("line_spacing", templateOptions.line_spacing);
+	s.setValue("border_width", templateOptions.border_width);
 
 	// save custom colors
 	s.setValue("custom_color_1", custom_colors.color1.name());
@@ -165,9 +160,20 @@ void PrintDialog::onFinished()
 	s.setValue("custom_color_5", custom_colors.color5.name());
 }
 
+void PrintDialog::createPrinterObj()
+{
+	// create a new printer object
+	if (!printer) {
+		qprinter = new QPrinter();
+		qprinter->setOrientation((QPrinter::Orientation)printOptions.landscape);
+		printer = new Printer(qprinter, &printOptions, &templateOptions, Printer::PRINT);
+	}
+}
+
 void PrintDialog::previewClicked(void)
 {
-	QPrintPreviewDialog previewDialog(&qprinter, this, Qt::Window
+	createPrinterObj();
+	QPrintPreviewDialog previewDialog(qprinter, this, Qt::Window
 		| Qt::CustomizeWindowHint | Qt::WindowCloseButtonHint
 		| Qt::WindowTitleHint);
 	connect(&previewDialog, SIGNAL(paintRequested(QPrinter *)), this, SLOT(onPaintRequested(QPrinter *)));
@@ -176,7 +182,8 @@ void PrintDialog::previewClicked(void)
 
 void PrintDialog::printClicked(void)
 {
-	QPrintDialog printDialog(&qprinter, this);
+	createPrinterObj();
+	QPrintDialog printDialog(qprinter, this);
 	if (printDialog.exec() == QDialog::Accepted) {
 		connect(printer, SIGNAL(progessUpdated(int)), progressBar, SLOT(setValue(int)));
 		printer->print();
@@ -186,6 +193,8 @@ void PrintDialog::printClicked(void)
 
 void PrintDialog::onPaintRequested(QPrinter *printerPtr)
 {
+	Q_UNUSED(printerPtr)
+	createPrinterObj();
 	connect(printer, SIGNAL(progessUpdated(int)), progressBar, SLOT(setValue(int)));
 	printer->print();
 	progressBar->setValue(0);

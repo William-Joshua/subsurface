@@ -1,6 +1,7 @@
-#include "divesitepicturesmodel.h"
-#include "dive.h"
-#include "stdint.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/divesitepicturesmodel.h"
+#include "core/dive.h"
+#include <stdint.h>
 
 #include <QtConcurrent>
 #include <QPixmap>

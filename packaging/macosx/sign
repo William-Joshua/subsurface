@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 # Hash is 3A8CE62A483083EDEA5581A61E770EC1FA8BECE8 but it doesn't seem to
 # find the key by hash
 
@@ -27,19 +27,19 @@ for i in \
 	./Subsurface.app//Contents/Frameworks/QtWebKitWidgets.framework/Versions/5/QtWebKitWidgets \
 	./Subsurface.app//Contents/Frameworks/QtWidgets.framework/Versions/5/QtWidgets \
 	./Subsurface.app//Contents/Frameworks/QtBluetooth.framework/Versions/5/QtBluetooth \
-	./Subsurface.app//Contents/Frameworks/QtDbus.framework/Versions/5/QtDbus \
-	./Subsurface.app//Contents/Frameworks/QtXml.framework/Versions/5/QtXml \
 	./Subsurface.app//Contents/Frameworks/QtWebChannel.framework/Versions/5/QtWebChannel \
+	./Subsurface.app//Contents/Frameworks/QtLocation.framework/Versions/5/QtLocation \
+	./Subsurface.app//Contents/Frameworks/QtQuickWidgets.framework/Versions/5/QtQuickWidgets \
 	./Subsurface.app//Contents/Frameworks/*.dylib
 do
-	codesign --keychain /Users/hohndel/Library/Keychains/login.keychain -s Dirk $i
+	codesign --keychain /Users/hohndel/Library/Keychains/login.keychain -s "Developer ID Application: Dirk Hohndel" $i
 done
 
 echo -- signing plugins
 for i in $(find ./Subsurface.app/Contents/PlugIns -name \*.dylib -o -name \*.so)
 do
-	codesign --keychain /Users/hohndel/Library/Keychains/login.keychain -s Dirk $i
+	codesign --keychain /Users/hohndel/Library/Keychains/login.keychain -s "Developer ID Application: Dirk Hohndel" $i
 done
 
 echo -- finally sign .app
-codesign -v --keychain /Users/hohndel/Library/Keychains/login.keychain -s Dirk ./Subsurface.app
+codesign -v --keychain /Users/hohndel/Library/Keychains/login.keychain -s "Developer ID Application: Dirk Hohndel" ./Subsurface.app

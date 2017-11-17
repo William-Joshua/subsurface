@@ -1,5 +1,6 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "cleanertablemodel.h"
-#include "metrics.h"
+#include "core/metrics.h"
 
 CleanerTableModel::CleanerTableModel(QObject *parent) : QAbstractTableModel(parent)
 {
@@ -7,6 +8,7 @@ CleanerTableModel::CleanerTableModel(QObject *parent) : QAbstractTableModel(pare
 
 int CleanerTableModel::columnCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return headers.count();
 }
 

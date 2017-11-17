@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVELOGIMPORTDIALOG_H
 #define DIVELOGIMPORTDIALOG_H
 
@@ -9,8 +10,8 @@
 #include <QAbstractTableModel>
 #include <QStyledItemDelegate>
 
-#include "subsurface-core/dive.h"
-#include "subsurface-core/divelist.h"
+#include "core/dive.h"
+#include "core/divelist.h"
 
 namespace Ui {
 	class DiveLogImportDialog;
@@ -87,6 +88,7 @@ slots:
 	void loadFileContentsKnownTypesSelected(int value);
 	void loadFileContents(int value, enum whatChanged triggeredBy);
 	int setup_csv_params(QStringList r, char **params, int pnr);
+	int parseTxtHeader(QString fileName, char **params, int pnr);
 
 private:
 	bool selector;
@@ -97,6 +99,7 @@ private:
 	ColumnNameResult *resultModel;
 	QString delta;
 	QString hw;
+	bool txtLog;
 
 	struct CSVAppConfig {
 		QString name;
@@ -116,7 +119,7 @@ private:
 		QString separator;
 	};
 
-#define CSVAPPS 8
+#define CSVAPPS 10
 	static const CSVAppConfig CSVApps[CSVAPPS];
 };
 

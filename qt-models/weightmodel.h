@@ -1,8 +1,9 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef WEIGHTMODEL_H
 #define WEIGHTMODEL_H
 
 #include "cleanertablemodel.h"
-#include "dive.h"
+#include "core/dive.h"
 
 /* Encapsulation of the Weight Model, that represents
  * the current weights on a dive. */

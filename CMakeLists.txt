@@ -1,64 +1,95 @@
 # cmake based build of Subsurface
 
+# Uncomment his to see all commands cmake actually executes
+# set(CMAKE_VERBOSE_MAKEFILE ON)
+
 project(Subsurface)
 cmake_minimum_required(VERSION 2.8.11)
-
 
 # global settings
 
 set(CMAKE_AUTOMOC ON)
+include(cmake/Modules/MacroOutOfSourceBuild.cmake)
+MACRO_ENSURE_OUT_OF_SOURCE_BUILD(
+    "We don't support building in source, please create a build folder elsewhere and remember to run git clean -xdf to remove temporary files created by CMake."
+)
 
+#Options regarding usage of pkgconfig
 option(LIBGIT2_FROM_PKGCONFIG "use pkg-config to retrieve libgit2" OFF)
 option(LIBDC_FROM_PKGCONFIG "use pkg-config to retrieve libdivecomputer" OFF)
 option(LIBGRANTLEE_FROM_PKGCONFIG "use pkg-config to retrieve grantlee" OFF)
-option(LIBMARBLE_FROM_PKGCONFIG "use pkg-config to retrieve marble" OFF)
-option(MAKE_TESTS "Make the tests" ON)
-option(NO_MARBLE "disable the marble widget" OFF)
+
+#Library Handling
+option(FORCE_LIBSSH "force linking with libssh to workaround libgit2 bug" ON)
+option(LIBGIT2_DYNAMIC "search for libgit2.so before libgit2.a" OFF)
+
+#Options regarding disabling parts of subsurface.
 option(NO_DOCS "disable the docs" OFF)
 option(NO_PRINTING "disable the printing support" OFF)
 option(NO_USERMANUAL "don't include a viewer for the user manual" OFF)
-option(USE_LIBGIT23_API "allow building with libgit2 master" OFF)
-option(FORCE_LIBSSH "force linking with libssh to workaround libgit2 bug" ON)
-option(SUBSURFACE_MOBILE "build the QtQuick version for mobile device" OFF)
+
+#Options regarding enabling parts of subsurface
 option(FBSUPPORT "allow posting to Facebook" ON)
 option(BTSUPPORT "enable support for QtBluetooth (requires Qt5.4 or newer)" ON)
 option(FTDISUPPORT "enable support for libftdi based serial" OFF)
-option(DISABLE_PLUGINS "disable support for social media plugins" OFF)
+option(USE_WEBENGINE "Use QWebEngine instead of QWebKit" OFF)
 
-add_definitions(-DSUBSURFACE_SOURCE="${CMAKE_SOURCE_DIR}")
+# Options regarding What should we build on subsurface
+option(MAKE_TESTS "Make the tests" ON)
 
+SET(SUBSURFACE_TARGET_EXECUTABLE "DesktopExecutable" CACHE STRING "The type of application, DesktopExecutable or MobileExecutable")
+LIST(APPEND SUBSURFACE_ACCEPTED_EXECUTABLES  "DesktopExecutable" "MobileExecutable")
+SET_PROPERTY(CACHE SUBSURFACE_TARGET_EXECUTABLE PROPERTY STRINGS ${SUBSURFACE_ACCEPTED_EXECUTABLES})
+
+#verify if Platform is correct and warn on wxit with example.
+list (FIND SUBSURFACE_ACCEPTED_EXECUTABLES ${SUBSURFACE_TARGET_EXECUTABLE}  _index)
+if (${_index} EQUAL -1)
+  message(FATAL_ERROR "Requested platform not supported, please use one of the following:
+    ${SUBSURFACE_ACCEPTED_EXECUTABLES}
+
+    inputted value was: ${SUBSURFACE_TARGET_EXECUTABLE}
+
+    Example: -DSUBSURFACE_TARGET_EXECUTABLE=DesktopExecutable")
+endif()
+
+# SUBSURFACE_SOURCE may be used in subdirectories (tests)
+set(SUBSURFACE_SOURCE ${CMAKE_SOURCE_DIR})
+add_definitions(-DSUBSURFACE_SOURCE="${SUBSURFACE_SOURCE}")
+
+#evenrything's correct, moving on.
 set(CMAKE_MODULE_PATH
 	${CMAKE_MODULE_PATH}
 	${${PROJECT_NAME}_SOURCE_DIR}/cmake/Modules
 )
 
-include_directories(.
-	${CMAKE_CURRENT_BINARY_DIR}
-	${CMAKE_BINARY_DIR}
-	${CMAKE_BINARY_DIR}/desktop-widgets
-	desktop-widgets/
-	qt-models
-	desktop-widgets/profile
-	subsurface-core/
-)
-
-# get the version string -- this is only used for Mac Bundle at this point
-# the other version data gets updated when running make - this is set when running cmake
-execute_process(
-	COMMAND sh scripts/get-version linux
-	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-	OUTPUT_VARIABLE SSRF_VERSION_STRING
-	OUTPUT_STRIP_TRAILING_WHITESPACE
-)
-
-message(STATUS "Creating build files for Subsurface ${SSRF_VERSION_STRING}")
-
+#
+# TODO: This Compilation part should go on the Target specific CMake.
+#
 if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 ")
+	if((${CMAKE_SYSTEM_NAME} MATCHES "Darwin") AND
+	   ((${CMAKE_SYSTEM_VERSION} MATCHES "11.4.") OR
+	    (${CMAKE_OSX_DEPLOYMENT_TARGET} MATCHES "10.7") OR
+	    (${CMAKE_OSX_DEPLOYMENT_TARGET} MATCHES "10.8")))
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -stdlib=libc++")
+	else()
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+	endif()
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "AppleClang")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99 ")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
 	set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
+
+	# Warn about possible float conversion errors
+	# Use NOT VERSION_LESS since VERSION_GREATER_EQUAL is not available
+	# in currently used cmake version.
+	if (NOT CMAKE_CXX_COMPILER_VERSION VERSION_LESS "4.9.0")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wfloat-conversion")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wfloat-conversion")
+	endif()
+
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
   # using Intel C++
 elseif ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
@@ -69,331 +100,231 @@ endif()
 find_package(PkgConfig)
 include(cmake/Modules/pkgconfig_helper.cmake)
 
-pkg_config_library(LIBXML libxml-2.0 REQUIRED)
-pkg_config_library(LIBSQLITE3 sqlite3 REQUIRED)
-pkg_config_library(LIBXSLT libxslt REQUIRED)
+# The 'HandleFindXXX' are special libraries that subsurface needs
+# to find and configure in a few different ways because of a few
+# developers that prefer pkg-config over CMake, so we try to make
+# everyone happy. It also sets some variables for each library, so
+# if you think a module miss anything, take a look on the specific
+# module file.
+include(cmake/Modules/HandleFindGit2.cmake)
+include(cmake/Modules/HandleFindLibDiveComputer.cmake)
+if(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "DesktopExecutable")
+	include(cmake/Modules/HandleFindGrantlee.cmake)
+	include(cmake/Modules/HandleUserManual.cmake)
+endif()
+include(cmake/Modules/HandleFtdiSupport.cmake)
+include(cmake/Modules/HandleVersionGeneration.cmake)
+include(cmake/Modules/RunOnBuildDir.cmake)
+include(cmake/Modules/cmake_variables_helper.cmake)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	include_directories(${CMAKE_OSX_SYSROOT}/usr/include/libxml2)
+	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lxml2 -lxslt -lsqlite3)
+else()
+	pkg_config_library(LIBXML libxml-2.0 REQUIRED)
+	pkg_config_library(LIBSQLITE3 sqlite3 REQUIRED)
+	pkg_config_library(LIBXSLT libxslt REQUIRED)
+endif()
 pkg_config_library(LIBZIP libzip REQUIRED)
 pkg_config_library(LIBUSB libusb-1.0 QUIET)
 
-# more libraries with special handling in case we build them ourselves
-if(LIBGIT2_FROM_PKGCONFIG)
-	pkg_config_library(LIBGIT2 libgit2 REQUIRED)
-	set(LIBGIT2_LIBRARIES "")
-	if(USE_LIBGIT23_API)
-		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_LIBGIT23_API")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBGIT23_API")
-		if(ANDROID)
-			# for Android we need to force a static link against ssl and crypto
-			# this is a bit hacky, but it seems to work
-			set(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES} ${LIBGIT2_LIBRARY_DIRS}/libssl.a ${LIBGIT2_LIBRARY_DIRS}/libcrypto.a)
-		endif()
-		if(FORCE_LIBSSH)
-			pkg_config_library(LIBSSH2 libssh2 REQUIRED)
-			set(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES} ${LIBSSH2_LIBRARIES})
-		endif()
-	endif()
-else()
-	find_package(LIBGIT2 REQUIRED)
-	include_directories(${LIBGIT2_INCLUDE_DIR})
-	if(USE_LIBGIT23_API)
-		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -DUSE_LIBGIT23_API")
-		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBGIT23_API")
-		if(FORCE_LIBSSH)
-			find_package(Libssh2 QUIET CONFIG)
-			if ("${LIBSSH2_VERSION}" STRGREATER "1.6.1")
-				set(LIBSSH2_LIBRARIES Libssh2::libssh2)
-			endif()
-			if(!LIBSSH2_FOUND OR "${LIBSSH2_FOUND}" STREQUAL "")
-				pkg_config_library(LIBSSH2 libssh2 REQUIRED)
-			endif()
-		endif()
-		find_package(libcurl QUIET)
-		if(!LIBCURL_FOUND OR "${LIBCURL_FOUND}" STREQUAL "")
-			pkg_config_library(LIBCURL libcurl REQUIRED)
-		endif()
-		set(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES} -L${LIBSSH2_LIBRARY_DIRS} ${LIBSSH2_LIBRARIES} ${LIBCURL_LIBRARIES})
-	endif()
-endif()
+include_directories(.
+	${CMAKE_CURRENT_BINARY_DIR}
+	${CMAKE_BINARY_DIR}
+	${CMAKE_BINARY_DIR}/desktop-widgets
+)
 
-if(LIBDC_FROM_PKGCONFIG)
-	pkg_config_library(LIBDC libdivecomputer REQUIRED)
-	set(LIBDIVECOMPUTER_LIBRARIES "")
-else()
-	find_package(Libdivecomputer REQUIRED)
-	include_directories(${LIBDIVECOMPUTER_INCLUDE_DIR})
-endif()
-
-# setup marble
-
-if(NOT NO_MARBLE)
-	if(LIBMARBLE_FROM_PKGCONFIG)
-		pkg_config_library(MARBLE libmarble REQUIRED)
-		set(MARBLE_LIBRARIES "")
+# Project Target specific configuration should go here,
+# if the configuration is too big or would disrupt the normal code flux,
+# move it somewhere else (another file) and include it.
+if(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "DesktopExecutable")
+	if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+		set(SUBSURFACE_TARGET Subsurface)
 	else()
-		find_package(MARBLE QUIET)
-		if(MARBLE_FOUND)
-			include_directories(${MARBLE_INCLUDE_DIR})
-		else()
-			set(NO_MARBLE ON)
-		endif()
+		set(SUBSURFACE_TARGET subsurface)
 	endif()
-else()
-	message(STATUS "building without marble widget support")
-	add_definitions(-DNO_MARBLE)
-	set(MARBLE_LIBRARIES "")
-endif()
-
-if(FTDISUPPORT)
-	message(STATUS "building with libftdi support")
-	pkg_config_library(LIBFTDI libftdi QUIET)
-	if (NOT LIBFTDI_FOUND)
-		pkg_config_library(LIBFTDI libftdi1 REQUIRED)
+	list(APPEND QT_EXTRA_COMPONENTS Quick)
+	list(APPEND QT_EXTRA_COMPONENTS Location)
+	list(APPEND QT_EXTRA_COMPONENTS QuickWidgets)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::Quick)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::Location)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::QuickWidgets)
+	remove_definitions(-DSUBSURFACE_MOBILE)
+elseif(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "MobileExecutable")
+	if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+		set(SUBSURFACE_TARGET Subsurface-mobile)
+	else()
+		set(SUBSURFACE_TARGET subsurface-mobile)
 	endif()
-	add_definitions(-DSERIAL_FTDI)
+	list(APPEND QT_EXTRA_COMPONENTS Quick)
+	list(APPEND QT_EXTRA_COMPONENTS QuickControls2)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::Quick)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::QuickControls2)
+	add_definitions(-DSUBSURFACE_MOBILE)
 endif()
 
 if(ANDROID)
-	set(FBSUPPORT OFF)
 	set(NO_PRINTING ON)
-endif()
-
-# setup Grantlee
-
-if(NO_PRINTING)
-	message(STATUS "building without printing support")
-	add_definitions(-DNO_PRINTING)
-	set(GRANTLEE_LIBRARIES "")
-else()
-	if(LIBGRANTLEE_FROM_PKGCONFIG)
-		pkg_config_library(GRANTLEE libgrantlee REQUIRED)
-		set(GRANTLEE_LIBRARIES "")
+	list(APPEND QT_EXTRA_COMPONENTS AndroidExtras)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::AndroidExtras)
+	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -llog)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        # add pthread to the end of the library list on Linux
+        # this is only needed on Ubuntu
+        # but shouldn't hurt on other Linux versions
+        # in some builds we appear to be missing libz for some strange reason...
+	# Add ssh2 at the end for openSUSE builds (for recent cmake?)
+        set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lssh2 -lz -lpthread)
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+        execute_process(
+                COMMAND sh scripts/get-version linux
+                WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+                OUTPUT_VARIABLE SSRF_VERSION_STRING
+                OUTPUT_STRIP_TRAILING_WHITESPACE
+        )
+        find_library(APP_SERVICES_LIBRARY ApplicationServices)
+        find_library(HID_LIB HidApi)
+        set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} ${HID_LIB})
+        set(EXTRA_LIBS ${APP_SERVICES_LIBRARY})
+        set(ICON_FILE ${CMAKE_SOURCE_DIR}/packaging/macosx/Subsurface.icns)
+	if(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "MobileExecutable")
+		set(MACOSX_BUNDLE_INFO_STRING "Subsurface-mobile")
+		set(MACOSX_BUNDLE_BUNDLE_NAME "Subsurface-mobile")
 	else()
-		find_package(Grantlee5 REQUIRED)
-		set(GRANTLEE_LIBRARIES Grantlee5::Templates)
+		set(MACOSX_BUNDLE_INFO_STRING "Subsurface")
+		set(MACOSX_BUNDLE_BUNDLE_NAME "Subsurface")
 	endif()
-	set(PRINTING_PKG PrintSupport)
-	set(PRINTING_LIB Qt5::PrintSupport)
+	set(MACOSX_BUNDLE_ICON_FILE Subsurface.icns)
+	set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.subsurface-divelog")
+        set(MACOSX_BUNDLE_BUNDLE_VERSION "${SSRF_VERSION_STRING}")
+        set(MACOSX_BUNDLE_SHORT_VERSION_STRING "${SSRF_VERSION_STRING}")
+        set(MACOSX_BUNDLE_LONG_VERSION_STRING "${SSRF_VERSION_STRING}")
+        set(MACOSX_BUNDLE_COPYRIGHT "Linus Torvalds, Dirk Hohndel, Tomaz Canabrava, and others")
+        set_source_files_properties(${ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+        set(SUBSURFACE_PKG MACOSX_BUNDLE ${ICON_FILE})
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+        set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lwsock32 -lws2_32)
+        remove_definitions(-DUNICODE)
+        add_definitions(-mwindows -D_WIN32)
 endif()
 
-if(NO_USERMANUAL)
-	message(STATUS "building without usermanual")
-	add_definitions(-DNO_USERMANUAL)
-else()
-	set(WEBKIT_PKG WebKitWidgets)
-	set(WEBKIT_LIB Qt5::WebKitWidgets)
-endif()
-
-set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} ${LIBDIVECOMPUTER_LIBRARIES} ${LIBGIT2_LIBRARIES} ${LIBUSB_LIBRARIES})
-
-# handle out of tree build correctly
-string(COMPARE EQUAL "${${PROJECT_NAME}_SOURCE_DIR}" "${${PROJECT_NAME}_BINARY_DIR}" insource)
-if (insource)
-	message(STATUS "building in Subsurface source tree - we recommend out of tree builds")
-else()
-	message(STATUS "out of source build from source in ${${PROJECT_NAME}_SOURCE_DIR}")
-endif()
-get_filename_component(PARENTDIR ${${PROJECT_NAME}_SOURCE_DIR} PATH)
-string(COMPARE EQUAL "${${PROJECT_NAME}_SOURCE_DIR}" "${PARENTDIR}" insourcesubdir)
-if(NOT (insource OR insourcedir))
-	add_custom_target(link_marble_data ALL COMMAND rm -rf ./marbledata && ln -s ${CMAKE_SOURCE_DIR}/marbledata ${CMAKE_BINARY_DIR}/marbledata)
-endif()
-
-# configure Qt.
-if(SUBSURFACE_MOBILE)
-	set(QT_QUICK_PKG Quick)
-	set(QT_QUICK_LIB Qt5::Quick)
-endif()
-if(ANDROID)
-	set(ANDROID_PKG AndroidExtras)
-	set(ANDROID_LIB Qt5::AndroidExtras)
-endif()
 if(BTSUPPORT)
-	set(BLUETOOTH_PKG Bluetooth)
-	set(BLUETOOTH_LIB Qt5::Bluetooth)
+	list(APPEND QT_EXTRA_COMPONENTS Bluetooth)
+	list(APPEND QT_EXTRA_LIBRARIES Qt5::Bluetooth)
 endif()
-find_package(Qt5 REQUIRED COMPONENTS Core Concurrent Widgets Network ${WEBKIT_PKG} ${PRINTING_PKG} Svg Test LinguistTools ${QT_QUICK_PKG} ${ANDROID_PKG} ${BLUETOOTH_PKG})
-set(QT_LIBRARIES Qt5::Core Qt5::Concurrent Qt5::Widgets Qt5::Network ${WEBKIT_LIB} ${PRINTING_LIB} Qt5::Svg ${QT_QUICK_LIB} ${ANDROID_LIB} ${BLUETOOTH_LIB})
+
+find_package(Qt5 REQUIRED COMPONENTS Core Concurrent Widgets Network Svg Test LinguistTools Positioning ${QT_EXTRA_COMPONENTS})
+set(QT_LIBRARIES Qt5::Core Qt5::Concurrent Qt5::Widgets Qt5::Network Qt5::Svg  Qt5::Positioning ${QT_EXTRA_LIBRARIES})
 set(QT_TEST_LIBRARIES ${QT_LIBRARIES} Qt5::Test)
 
-if (BTSUPPORT AND "${Qt5Core_VERSION_STRING}" STRLESS "5.4.0")
+#disable bluetooth if Qt version is ancient.
+if (BTSUPPORT AND "${Qt5Core_VERSION}" VERSION_LESS 5.4.0)
 	set(BTSUPPORT OFF)
-	message(STATUS "Turning off Bluetooth support as Qt version ${Qt5Core_VERSION_STRING} is insufficient for that")
+	message(STATUS "Turning off Bluetooth support as Qt version ${Qt5Core_VERSION} is insufficient for that")
 	list(REMOVE_ITEM QT_LIBRARIES Qt5::Bluetooth)
 endif()
 
-# Generate the ssrf-config.h every 'make'
-file(WRITE ${CMAKE_BINARY_DIR}/version.h.in
-"#define VERSION_STRING \"@VERSION_STRING@\"
-#define GIT_VERSION_STRING \"@GIT_VERSION_STRING@\"
-#define CANONICAL_VERSION_STRING \"@CANONICAL_VERSION_STRING@\"
-")
-
-file(WRITE ${CMAKE_BINARY_DIR}/version.cmake "
-	if(\${APPLE})
-		set(VER_OS darwin)
-	elseif(\${WIN32})
-		set(VER_OS win)
+# Windows Qt doesn't support BLE at all
+# the rest of them need at least 5.6 to be reasonable but really, you want 5.9.1
+if (BTSUPPORT AND NOT CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	if ("${Qt5Core_VERSION}" VERSION_LESS 5.6.0)
+		message(STATUS "Turning off BLE support as Qt version ${Qt5Core_VERSION} is insufficient for that")
 	else()
-		set(VER_OS linux)
+		set(BLESUPPORT ON)
+		if ("${Qt5Core_VERSION}" VERSION_LESS 5.9.1)
+			message(STATUS "BLE support has been enabled, but for best results you really want Qt 5.9.1")
+		endif()
 	endif()
-	if(CMAKE_SYSTEM_NAME STREQUAL \"Windows\")
-		set(VER_OS win)
-	endif()
-	execute_process(
-		COMMAND sh scripts/get-version \${VER_OS}
-		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-		OUTPUT_VARIABLE VERSION_STRING
-		OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	execute_process(
-		COMMAND sh scripts/get-version linux
-		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-		OUTPUT_VARIABLE GIT_VERSION_STRING
-		OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	execute_process(
-		COMMAND sh scripts/get-version full
-		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-		OUTPUT_VARIABLE CANONICAL_VERSION_STRING
-		OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-	configure_file(\${SRC} \${DST} @ONLY)
-	if(CMAKE_SYSTEM_NAME STREQUAL \"Windows\")
-		execute_process(
-			COMMAND cat ${CMAKE_SOURCE_DIR}/packaging/windows/subsurface.nsi.in
-			COMMAND sed -e \"s/VERSIONTOKEN/\${GIT_VERSION_STRING}/\"
-			COMMAND sed -e \"s/PRODVTOKEN/\${CANONICAL_VERSION_STRING}/\"
-			OUTPUT_FILE ${CMAKE_BINARY_DIR}/staging/subsurface.nsi
-		)
-	endif()
-")
-
-add_custom_target(
-	version ALL COMMAND ${CMAKE_COMMAND} ${CMAKE_COMMAND}
-	-D SRC=${CMAKE_BINARY_DIR}/version.h.in
-	-D DST=${CMAKE_BINARY_DIR}/ssrf-version.h
-	-D CMAKE_SYSTEM_NAME=${CMAKE_SYSTEM_NAME}
-	-P ${CMAKE_BINARY_DIR}/version.cmake
-)
-
-# set up the different target platforms
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	set(SUBSURFACE_TARGET subsurface)
-	# in some builds we appear to be missing libz for some strange reason...
-	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lz)
-endif()
-if(ANDROID)
-	set(SUBSURFACE_TARGET subsurface)
-	# To allow us to debug log to logcat
-	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -llog)
-endif()
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	set(SUBSURFACE_TARGET Subsurface)
-	find_library(APP_SERVICES_LIBRARY ApplicationServices)
-	find_library(HID_LIB HidApi)
-	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} ${HID_LIB})
-	set(EXTRA_LIBS ${APP_SERVICES_LIBRARY})
-	set(ICON_FILE ${CMAKE_SOURCE_DIR}/packaging/macosx/Subsurface.icns)
-	set(MACOSX_BUNDLE_INFO_STRING "Subsurface")
-	set(MACOSX_BUNDLE_ICON_FILE Subsurface.icns)
-	set(MACOSX_BUNDLE_GUI_IDENTIFIER "org.subsurface-divelog")
-	set(MACOSX_BUNDLE_BUNDLE_NAME "Subsurface")
-	set(MACOSX_BUNDLE_BUNDLE_VERSION "${SSRF_VERSION_STRING}")
-	set(MACOSX_BUNDLE_SHORT_VERSION_STRING "${SSRF_VERSION_STRING}")
-	set(MACOSX_BUNDLE_LONG_VERSION_STRING "${SSRF_VERSION_STRING}")
-	set(MACOSX_BUNDLE_COPYRIGHT "Linus Torvalds, Dirk Hohndel, Tomaz Canabrava, and others")
-	set_source_files_properties(${ICON_FILE} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
-	set(SUBSURFACE_PKG MACOSX_BUNDLE ${ICON_FILE})
-endif()
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
-	set(SUBSURFACE_TARGET subsurface)
-	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lwsock32 -lws2_32)
-	remove_definitions(-DUNICODE)
-	add_definitions(-mwindows -D_WIN32)
-endif()
-
-qt5_add_resources(SUBSURFACE_RESOURCES subsurface.qrc)
-
-# include translations
-add_subdirectory(translations)
-add_subdirectory(subsurface-core)
-add_subdirectory(qt-models)
-add_subdirectory(profile-widget)
-
-if (NOT SUBSURFACE_MOBILE)
-	add_subdirectory(desktop-widgets)
-endif()
-
-if(FBSUPPORT)
-	add_definitions(-DFBSUPPORT)
 endif()
 
 if(BTSUPPORT)
 	add_definitions(-DBT_SUPPORT)
 endif()
 
+if(BLESUPPORT)
+	add_definitions(-DBLE_SUPPORT)
+endif()
 
-# add pthread to the end of the library list on Linux
-# this is only needed on Ubuntu (why do these idiots break everything?)
-# but shouldn't hurt on other Linux versions
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT ANDROID)
-	set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} -lpthread)
+#set up the subsurface_link_libraries variable
+set(SUBSURFACE_LINK_LIBRARIES ${SUBSURFACE_LINK_LIBRARIES} ${LIBDIVECOMPUTER_LIBRARIES} ${LIBGIT2_LIBRARIES} ${LIBUSB_LIBRARIES})
+qt5_add_resources(SUBSURFACE_RESOURCES subsurface.qrc)
+
+# include translations
+add_subdirectory(translations)
+add_subdirectory(core)
+add_subdirectory(qt-models)
+add_subdirectory(profile-widget)
+
+if (${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "DesktopExecutable")
+	add_subdirectory(desktop-widgets)
 endif()
 
 # create the executables
-if(SUBSURFACE_MOBILE)
-	set(SUBSURFACE_TARGET subsurface-mobile)
+if(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "MobileExecutable")
 	set(MOBILE_SRC
-		qt-mobile/qmlmanager.cpp
-		qt-mobile/qmlprofile.cpp
-		qt-models/divelistmodel.cpp
+		mobile-widgets/qmlmanager.cpp
+		mobile-widgets/qmlprofile.cpp
+		mobile-widgets/qml/kirigami/src/kirigamiplugin.cpp
+		mobile-widgets/qml/kirigami/src/settings.cpp
+		mobile-widgets/qml/kirigami/src/enums.cpp
+		mobile-widgets/qml/kirigami/src/libkirigami/basictheme.cpp
+		mobile-widgets/qml/kirigami/src/libkirigami/kirigamipluginfactory.cpp
+		mobile-widgets/qml/kirigami/src/libkirigami/platformtheme.cpp
 		subsurface-mobile-main.cpp
 		subsurface-mobile-helper.cpp
 	)
-	add_definitions(-DSUBSURFACE_MOBILE)
-	qt5_add_resources(MOBILE_RESOURCES qt-mobile/qml/mobile-resources.qrc)
+	include_directories(${CMAKE_SOURCE_DIR}/mobile-widgets/qml/kirigami/src/libkirigami)
+	if(NOT ANDROID AND NOT iOS)
+		set(MOBILE_SRC ${MOBILE_SRC} mobile-widgets/qml/kirigami/src/desktopicon.cpp)
+	endif()
+	add_definitions(-DKIRIGAMI_BUILD_TYPE_STATIC)
+	qt5_add_resources(MOBILE_RESOURCES mobile-widgets/qml/mobile-resources.qrc)
+	qt5_add_resources(MOBILE_RESOURCES mobile-widgets/qml/kirigami/kirigami.qrc)
+	# When building the mobile application in Android, link it and Qt will do the rest, when doing the mobile application on Desktop, create an executable.
 	if(ANDROID)
-		add_library(subsurface-mobile SHARED ${MOBILE_SRC} ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES} ${MOBILE_RESOURCES})
+		add_library(${SUBSURFACE_TARGET} SHARED ${SUBSURFACE_PKG} ${MOBILE_SRC} ${SUBSURFACE_RESOURCES} ${MOBILE_RESOURCES})
 	else()
-		add_executable(subsurface-mobile ${MOBILE_SRC} ${SUBSURFACE_PKG} ${SUBSURFACE_RESOURCES} ${MOBILE_RESOURCES})
+		add_executable(${SUBSURFACE_TARGET} MACOSX_BUNDLE WIN32 ${SUBSURFACE_PKG} ${MOBILE_SRC} ${SUBSURFACE_RESOURCES} ${MOBILE_RESOURCES})
 	endif()
 	target_link_libraries(
 		${SUBSURFACE_TARGET}
 		subsurface_profile
 		subsurface_models
 		subsurface_corelib
-		${SUBSURFACE_LINK_LIBRARIES})
-else()
-# the main app.
+		${SUBSURFACE_LINK_LIBRARIES}
+	)
+elseif(${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "DesktopExecutable")
 	set(SUBSURFACE_APP
 		subsurface-desktop-main.cpp
 		subsurface-desktop-helper.cpp
 	)
 	source_group("Subsurface App" FILES ${SUBSURFACE_APP})
+        if(ANDROID)
+                add_library(${SUBSURFACE_TARGET} SHARED ${SUBSURFACE_PKG} ${SUBSURFACE_APP} ${SUBSURFACE_RESOURCES})
+        else()
+                add_executable(${SUBSURFACE_TARGET} MACOSX_BUNDLE WIN32 ${SUBSURFACE_PKG} ${SUBSURFACE_APP} ${SUBSURFACE_RESOURCES})
+        endif()
 
-	if(ANDROID)
-		# Produce a shared-library instead of a program.
-		# Something that androiddeployqt can work with.
-		# this is the desktop version, running on android.
-		add_library(${SUBSURFACE_TARGET} SHARED ${SUBSURFACE_PKG} ${SUBSURFACE_APP} ${SUBSURFACE_RESOURCES})
-	else()
-		add_executable(${SUBSURFACE_TARGET} MACOSX_BUNDLE WIN32 ${SUBSURFACE_PKG} ${SUBSURFACE_APP} ${SUBSURFACE_RESOURCES})
+	if(FBSUPPORT)
+		set(FACEBOOK_INTEGRATION facebook_integration)
+		add_dependencies(facebook_integration subsurface_generated_ui)
 	endif()
-
 	target_link_libraries(
 		${SUBSURFACE_TARGET}
 		subsurface_generated_ui
 		subsurface_interface
-		facebook_integration
+		${FACEBOOK_INTEGRATION}
 		subsurface_profile
 		subsurface_statistics
 		subsurface_models
 		subsurface_corelib
 		${SUBSURFACE_LINK_LIBRARIES}
 	)
+	add_dependencies(subsurface_desktop_preferences subsurface_generated_ui)
 	add_dependencies(subsurface_statistics subsurface_generated_ui)
 	add_dependencies(subsurface_interface subsurface_generated_ui)
 	add_dependencies(subsurface_profile subsurface_generated_ui)
+	add_dependencies(subsurface_models subsurface_generated_ui)
 	add_dependencies(subsurface_generated_ui version)
 endif()
 
@@ -416,50 +347,10 @@ endif()
 add_executable(export-html EXCLUDE_FROM_ALL export-html.cpp ${SUBSURFACE_RESOURCES})
 target_link_libraries(export-html subsurface_corelib ${SUBSURFACE_LINK_LIBRARIES})
 
-# install a few things so that one can run Subsurface from the build
-# directory
-if(NOT insource)
-	add_custom_target(themeLink ALL
-		COMMAND
-		rm -f ${CMAKE_BINARY_DIR}/theme &&
-		ln -s ${CMAKE_SOURCE_DIR}/theme ${CMAKE_BINARY_DIR}/theme
-	)
-	if(NOT NO_PRINTING)
-		add_custom_target(printing_templatesLink ALL
-			COMMAND
-			rm -f ${CMAKE_BINARY_DIR}/printing_templates &&
-			ln -s ${CMAKE_SOURCE_DIR}/printing_templates ${CMAKE_BINARY_DIR}/printing_templates
-		)
-	endif()
-	if(NOT NO_DOCS)
-		add_custom_target(
-			documentationLink ALL
-			COMMAND
-			mkdir -p ${CMAKE_BINARY_DIR}/Documentation/ &&
-			rm -rf ${CMAKE_BINARY_DIR}/Documentation/images &&
-			ln -s ${CMAKE_SOURCE_DIR}/Documentation/images ${CMAKE_BINARY_DIR}/Documentation/images
-		)
-	endif()
-else()
-	if(NOT NO_DOCS)
-		add_custom_target(
-			documentationLink ALL
-		)
-	endif()
-endif()
-if(NOT NO_DOCS)
-	add_custom_target(
-		documentation ALL
-		COMMAND
-		${CMAKE_MAKE_PROGRAM} -C ${CMAKE_SOURCE_DIR}/Documentation OUT=${CMAKE_BINARY_DIR}/Documentation/ doc
-		DEPENDS documentationLink
-	)
-endif()
-
 # install Subsurface
 # first some variables with files that need installing
 set(DOCFILES
-	README
+	README.md
 	ReleaseNotes/ReleaseNotes.txt
 	SupportedDivecomputers.txt
 	${CMAKE_BINARY_DIR}/Documentation/user-manual.html
@@ -468,20 +359,8 @@ set(DOCFILES
 	${CMAKE_BINARY_DIR}/Documentation/user-manual_ru.html
 )
 
-set(QTTRANSLATIONS_BASE
-	qt_da.qm
-	qt_de.qm
-	qt_es.qm
-	qt_fr.qm
-	qt_he.qm
-	qt_hu.qm
-	qt_pl.qm
-	qt_pt.qm
-	qt_ru.qm
-	qt_sk.qm
-	qt_sv.qm
-	qt_zh_TW.qm
-)
+# add all the translations that we may need
+FILE(STRINGS "subsurface_enabled_translations" QTTRANSLATIONS_BASE)
 
 if(NOT DEFINED QT_TRANSLATION_DIR OR QT_TRANSLATION_DIR STREQUAL "")
 	set(QT_TRANSLATION_DIR ${Qt5Core_DIR}/../../../translations)
@@ -489,17 +368,36 @@ endif()
 set(QTTRANSLATIONS "")
 foreach(QTTRANSLATION ${QTTRANSLATIONS_BASE})
 	if(NOT ${QTTRANSLATION} STREQUAL "")
-		set(QTTRANSLATIONS ${QTTRANSLATIONS} ${QT_TRANSLATION_DIR}/${QTTRANSLATION})
+		if(EXISTS ${QT_TRANSLATION_DIR}/${QTTRANSLATION})
+			set(QTTRANSLATIONS ${QTTRANSLATIONS} ${QT_TRANSLATION_DIR}/${QTTRANSLATION})
+		endif()
 	endif()
 endforeach()
 
 # now for each platform the install instructions
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
-	set(RESOURCEDIR ${CMAKE_BINARY_DIR}/Subsurface.app/Contents/Resources)
-	set(PLUGINDIR ${CMAKE_BINARY_DIR}/Subsurface.app/Contents/PlugIns)
-	install(DIRECTORY marbledata/maps DESTINATION ${RESOURCEDIR}/data)
-	install(DIRECTORY marbledata/bitmaps DESTINATION ${RESOURCEDIR}/data)
+if(ANDROID)
+	# Android template directory
+	include(${QT_ANDROID_CMAKE})
+	if((DEFINED ENV{KEYSTORE}) AND (DEFINED ENV{KEYSTORE_PASSWORD}))
+		add_qt_android_apk(${SUBSURFACE_TARGET}.apk ${SUBSURFACE_TARGET}
+			PACKAGE_SOURCES ${CMAKE_BINARY_DIR}/android-mobile DEPENDS ${ANDROID_NATIVE_LIBSSL} ${ANDROID_NATIVE_LIBCRYPT}
+			BUILDTOOLS_REVISION ${BUILDTOOLS_REVISION}
+			KEYSTORE $ENV{KEYSTORE} Subsurface-mobile KEYSTORE_PASSWORD $ENV{KEYSTORE_PASSWORD}
+		)
+		message(STATUS "KEYSTORE=$ENV{KEYSTORE} KEYSTORE_PASSWORD=$ENV{KEYSTORE_PASSWORD}")
+	else()
+		add_qt_android_apk(${SUBSURFACE_TARGET}.apk ${SUBSURFACE_TARGET}
+			PACKAGE_SOURCES ${CMAKE_BINARY_DIR}/android-mobile DEPENDS ${ANDROID_NATIVE_LIBSSL} ${ANDROID_NATIVE_LIBCRYPT}
+			BUILDTOOLS_REVISION ${BUILDTOOLS_REVISION}
+		)
+		message(STATUS "no KEYSTORE")
+	endif()
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	set(APP_BUNDLE_DIR "${SUBSURFACE_TARGET}.app")
+	set(EXTRA_MACDEPLOY_ARGS "-qmldir=${APP_BUNDLE_DIR}/Contents/Resources/qml ")
+	set(MACDEPLOY_ARGS "${EXTRA_MACDEPLOY_ARGS}-executable=${APP_BUNDLE_DIR}/Contents/MacOS/${SUBSURFACE_TARGET} -always-overwrite")
+	set(RESOURCEDIR ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/Resources)
+	set(PLUGINDIR ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/PlugIns)
 	install(DIRECTORY Documentation/images DESTINATION ${RESOURCEDIR}/share/Documentation)
 	install(FILES ${DOCFILES} DESTINATION ${RESOURCEDIR}/share/Documentation)
 	install(DIRECTORY theme DESTINATION ${RESOURCEDIR})
@@ -507,24 +405,44 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
 	install(FILES ${TRANSLATIONS} DESTINATION ${RESOURCEDIR}/translations)
 	install(FILES ${QTTRANSLATIONS} DESTINATION ${RESOURCEDIR}/translations)
 	install(FILES ${CMAKE_SOURCE_DIR}/gpl-2.0.txt DESTINATION ${RESOURCEDIR})
+	install(CODE "execute_process(COMMAND mkdir -p ${RESOURCEDIR}/qml)")
 	# this is a HACK
-	install(DIRECTORY ${Grantlee5_DIR}/../../grantlee DESTINATION ${PLUGINDIR})
+	if((${SUBSURFACE_TARGET_EXECUTABLE} MATCHES "DesktopExecutable") AND (NOT NO_PRINTING))
+		install(DIRECTORY ${Grantlee5_DIR}/../../grantlee DESTINATION ${PLUGINDIR})
+	endif()
+	install(CODE "execute_process(COMMAND mkdir -p ${PLUGINDIR}/geoservices)")
+	install(CODE "execute_process(COMMAND cp ${_qt5Core_install_prefix}/plugins/geoservices/libqtgeoservices_googlemaps.dylib ${PLUGINDIR}/geoservices)")
 	# this is a hack - but I don't know how else to find the macdeployqt program if it's not in the PATH
 	string(REPLACE moc macdeployqt MACDEPLOYQT ${QT_MOC_EXECUTABLE})
-	install(CODE "execute_process(COMMAND ${MACDEPLOYQT} Subsurface.app)")
+	install(CODE "execute_process(COMMAND ${MACDEPLOYQT} ${APP_BUNDLE_DIR} ${MACDEPLOY_ARGS})")
+	# and another hack to get the QML Components in the right place
+	install(CODE "execute_process(COMMAND mkdir -p ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/Frameworks/qml)")
+	install(CODE "execute_process(COMMAND cp -a ${_qt5Core_install_prefix}/qml/QtQuick.2 ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/Resources/qml)")
+	install(CODE "execute_process(COMMAND cp -a ${_qt5Core_install_prefix}/qml/QtLocation ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/Resources/qml)")
+	install(CODE "execute_process(COMMAND cp -a ${_qt5Core_install_prefix}/qml/QtPositioning ${CMAKE_BINARY_DIR}/${APP_BUNDLE_DIR}/Contents/Resources/qml)")
 	install(CODE "message(STATUS \"two ERRORS here about libmysqlclient and libpq not found are harmless\")")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+	if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+		if(NOT DEFINED OBJCOPY)
+			set(OBJCOPY i686-w64-mingw32.shared-objcopy)
+		endif()
+		find_program(OBJCOPY_FOUND ${OBJCOPY})
+		if (OBJCOPY_FOUND)
+			message(STATUS "Build type is 'RelWithDebInfo'. Creating debug symbols in a separate file.")
+			add_custom_command(TARGET ${SUBSURFACE_TARGET} POST_BUILD
+				COMMAND ${OBJCOPY} --only-keep-debug ${SUBSURFACE_TARGET}.exe ${SUBSURFACE_TARGET}.exe.debug
+				COMMAND ${OBJCOPY} --strip-debug --strip-unneeded ${SUBSURFACE_TARGET}.exe
+				COMMAND ${OBJCOPY} --add-gnu-debuglink=${SUBSURFACE_TARGET}.exe.debug ${SUBSURFACE_TARGET}.exe
+			)
+		endif()
+	endif()
 
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 	# Windows bundling rules
 	# We don't have a helpful tool like macdeployqt for Windows, so we hardcode
 	# which libs we need.
 	# "make install", copies everything into a staging area
 	# "make installer", uses makensis to create an installer executable
 	set(WINDOWSSTAGING ${CMAKE_BINARY_DIR}/staging)
-	install(DIRECTORY marbledata/maps DESTINATION ${WINDOWSSTAGING}/data)
-	install(DIRECTORY marbledata/bitmaps DESTINATION ${WINDOWSSTAGING}/data)
 	install(DIRECTORY Documentation/images DESTINATION ${WINDOWSSTAGING}/Documentation)
 	install(FILES ${DOCFILES} DESTINATION ${WINDOWSSTAGING}/Documentation)
 	install(DIRECTORY theme DESTINATION ${WINDOWSSTAGING})
@@ -539,55 +457,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		set(MAKENSIS makensis)
 	endif()
 
-	# next figure out the DLLs we need to include in the installer
-	# since this needs to run at install time we create a new cmake
-	# script that then gets executed at install time with install(CODE...)
-	file(WRITE ${CMAKE_BINARY_DIR}/dlllist.cmake "
-		message(STATUS \"processing dlllist.cmake\")
-		# figure out which command to use for objdump
-		execute_process(
-			COMMAND ${CMAKE_C_COMPILER} -dumpmachine
-			OUTPUT_VARIABLE OBJDUMP
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-		# figure out where we should search for libraries
-		execute_process(
-			COMMAND ${CMAKE_C_COMPILER} -print-search-dirs
-			COMMAND sed -nE \"/^libraries: =/{s///;s,/lib/?\\\(:|\\\$\\\$\\\),/bin\\\\1,g;p;q;}\"
-			OUTPUT_VARIABLE ADDPATH
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-		# since cmake doesn't appear to give us a variable with
-		# all libraries we link against, grab the link.txt script
-		# instead and drop the command name from it (before the
-		# first space) -- this will fail if the full path for the
-		# linker used contains a space...
-		execute_process(
-			COMMAND tail -1 CMakeFiles/subsurface.dir/link.txt
-			COMMAND cut -d\\  -f 2-
-			OUTPUT_VARIABLE LINKER_LINE
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-		# finally run our win-ldd.pl script against that to
-		# collect all the required dlls
-		execute_process(
-			COMMAND sh -c \"OBJDUMP=\${OBJDUMP}-objdump PATH=$ENV{PATH}:\${ADDPATH} perl ${CMAKE_SOURCE_DIR}/scripts/win-ldd.pl ${SUBSURFACE_TARGET}.exe \${LINKER_LINE}\"
-			WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
-			OUTPUT_VARIABLE DLLS
-			OUTPUT_STRIP_TRAILING_WHITESPACE
-		)
-		# replace newlines with semicolons so this is a cmake list
-		string(REPLACE \"\\n\" \";\" DLLLIST \${DLLS})
-		# executing 'install' as a command seems hacky, but you
-		# can't use the install() cmake function in a script
-		foreach(DLL \${DLLLIST})
-			execute_process(COMMAND install \${DLL} \${STAGING})
-		endforeach()
-	")
 	# the script we created above is now added as a command to run at
 	# install time - so this ensures that subsurface.exe has been
 	# built before this is run
-	install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -DSTAGING=${WINDOWSSTAGING} -P ${CMAKE_BINARY_DIR}/dlllist.cmake)")
+	install(CODE "execute_process(COMMAND ${CMAKE_COMMAND} -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER} -DSUBSURFACE_TARGET=${SUBSURFACE_TARGET} -DSUBSURFACE_SOURCE=${SUBSURFACE_SOURCE} -DSTAGING=${WINDOWSSTAGING} -P ${CMAKE_SOURCE_DIR}/cmake/Modules/dlllist.cmake)")
 
 	# create the subsurface-x.y.z.exe installer - this needs to depend
 	# on the install target but cmake doesn't allow that, so we depend
@@ -603,27 +476,19 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
 		COMMAND ${MAKENSIS} ${WINDOWSSTAGING}/subsurface.nsi
 		DEPENDS fake_install
 	)
-endif()
-
-if(ANDROID)
-	# Android template directory
-	include(${QT_ANDROID_CMAKE})
-	if(SUBSURFACE_MOBILE)
-		set(ANDROID_PACKAGE_SOURCE_DIR, ${CMAKE_BINARY_DIR}/android-mobile)
-		add_qt_android_apk(subsurface-mobile.apk subsurface-mobile
-			PACKAGE_SOURCES ${CMAKE_CURRENT_LIST_DIR}/android-mobile
-		)
+elseif (CMAKE_SYSTEM_NAME STREQUAL "Linux")
+	# the syntax is odd, but this searches for libqtgeoservices_googlemaps.so
+	# in the filesystem below our install-root
+	# different Linux flavors put the plugin in different directories
+	file(GLOB_RECURSE GOOGLEMAPS ${CMAKE_SOURCE_DIR}/../install-root/libqtgeoservices_googlemaps.so)
+	if ("${GOOGLEMAPS}" STREQUAL "")
+		message(STATUS "Cannot find libqtgeoservices_googlemaps.so")
 	else()
-		set(ANDROID_PACKAGE_SOURCE_DIR, ${CMAKE_BINARY_DIR}/android)
-		add_qt_android_apk(subsurface.apk ${SUBSURFACE_TARGET}
-			PACKAGE_SOURCES ${CMAKE_CURRENT_LIST_DIR}/android
-		)
+		add_custom_target(link_googlemaps_plugin ALL COMMAND
+			rm -rf ${CMAKE_BINARY_DIR}/geoservices &&
+			mkdir -p ${CMAKE_BINARY_DIR}/geoservices &&
+			ln -sf ${GOOGLEMAPS} ${CMAKE_BINARY_DIR}/geoservices)
 	endif()
-endif()
-
-if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-	install(DIRECTORY marbledata/maps DESTINATION share/subsurface/data)
-	install(DIRECTORY marbledata/bitmaps DESTINATION share/subsurface/data)
 	install(FILES subsurface.debug DESTINATION bin)
 	install(FILES subsurface.desktop DESTINATION share/applications)
 	install(FILES icons/subsurface-icon.svg DESTINATION share/icons/hicolor/scalable/apps)
@@ -632,24 +497,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	install(DIRECTORY theme DESTINATION share/subsurface)
 	install(DIRECTORY printing_templates DESTINATION share/subsurface)
 	install(FILES ${TRANSLATIONS} DESTINATION share/subsurface/translations)
-	if(SUBSURFACE_MOBILE)
-		install(TARGETS subsurface-mobile DESTINATION bin)
-	else()
-		install(TARGETS ${SUBSURFACE_TARGET} DESTINATION bin)
-	endif()
-	if(DEFINED LIBMARBLEDEVEL)
-		install(
-			CODE "file(GLOB SSRFMARBLE_SHLIBS \"${LIBMARBLEDEVEL}/lib/libssrfmarblewidget.so*\")"
-			CODE "file(INSTALL \${SSRFMARBLE_SHLIBS} DESTINATION ${CMAKE_INSTALL_PREFIX}/lib)"
-		)
-	endif()
+        install(TARGETS ${SUBSURFACE_TARGET} DESTINATION bin)
 endif()
-
-# get_cmake_property(_variableNames VARIABLES)
-# foreach (_variableName ${_variableNames})
-#     message(STATUS "${_variableName}=${${_variableName}}")
-# endforeach()
 
 if (MAKE_TESTS)
 	add_subdirectory(tests)
 endif()
+
+# useful for debugging CMake issues
+# print_all_variables()

@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVEPLANNERMODEL_H
 #define DIVEPLANNERMODEL_H
 
 #include <QAbstractTableModel>
 #include <QDateTime>
 
-#include "dive.h"
+#include "core/dive.h"
 
 class DivePlannerPointsModel : public QAbstractTableModel {
 	Q_OBJECT
@@ -30,7 +31,8 @@ public:
 	virtual QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const;
 	virtual bool setData(const QModelIndex &index, const QVariant &value, int role = Qt::EditRole);
 	virtual Qt::ItemFlags flags(const QModelIndex &index) const;
-	void gaschange(const QModelIndex &index, QString newgas);
+	void gasChange(const QModelIndex &index, int newcylinderid);
+	void cylinderRenumber(int mapping[]);
 	void removeSelectedPoints(const QVector<int> &rows);
 	void setPlanMode(Mode mode);
 	bool isPlanner();
@@ -40,10 +42,9 @@ public:
 	Mode currentMode() const;
 	bool setRecalc(bool recalc);
 	bool recalcQ();
-	void tanksUpdated();
-	void rememberTanks();
-	bool tankInUse(struct gasmix gasmix);
+	bool tankInUse(int cylinderid);
 	void setupCylinders();
+	bool updateMaxDepth();
 	/**
 	 * @return the row number.
 	 */
@@ -52,20 +53,19 @@ public:
 	int size();
 	struct diveplan &getDiveplan();
 	QStringList &getGasList();
-	QVector<QPair<int, int> > collectGases(dive *d);
 	int lastEnteredPoint();
 	void removeDeco();
 	static bool addingDeco;
 
 public
 slots:
-	int addStop(int millimeters = 0, int seconds = 0, struct gasmix *gas = 0, int ccpoint = 0, bool entered = true);
+	int addStop(int millimeters = 0, int seconds = 0, int cylinderid_in = -1, int ccpoint = 0, bool entered = true);
 	void addCylinder_clicked();
 	void setGFHigh(const int gfhigh);
 	void triggerGFHigh();
 	void setGFLow(const int ghflow);
 	void triggerGFLow();
-	void setConservatism(int level);
+	void setVpmbConservatism(int level);
 	void setSurfacePressure(int pressure);
 	void setSalinity(int salinity);
 	int getSurfacePressure();
@@ -79,6 +79,7 @@ slots:
 	void setDisplayRuntime(bool value);
 	void setDisplayDuration(bool value);
 	void setDisplayTransitions(bool value);
+	void setDisplayVariations(bool value);
 	void setDecoMode(int mode);
 	void setSafetyStop(bool value);
 	void savePlan();
@@ -93,6 +94,13 @@ slots:
 	void setReserveGas(int reserve);
 	void setSwitchAtReqStop(bool value);
 	void setMinSwitchDuration(int duration);
+	void setSacFactor(double factor);
+	void setProblemSolvingTime(int minutes);
+	void setAscrate75(int rate);
+	void setAscrate50(int rate);
+	void setAscratestops(int rate);
+	void setAscratelast6m(int rate);
+	void setDescrate(int rate);
 
 signals:
 	void planCreated();
@@ -104,14 +112,14 @@ signals:
 
 private:
 	explicit DivePlannerPointsModel(QObject *parent = 0);
-	bool addGas(struct gasmix mix);
 	void createPlan(bool replanCopy);
 	struct diveplan diveplan;
+	struct divedatapoint *cloneDiveplan(struct diveplan *plan_copy);
+	void computeVariations();
+	int analyzeVariations(struct decostop *min, struct decostop *mid, struct decostop *max, const char *unit);
 	Mode mode;
 	bool recalc;
 	QVector<divedatapoint> divepoints;
-	QVector<sample> backupSamples; // For editing added dives.
-	QVector<QPair<int, int> > oldGases;
 	QDateTime startTime;
 	int tempGFHigh;
 	int tempGFLow;

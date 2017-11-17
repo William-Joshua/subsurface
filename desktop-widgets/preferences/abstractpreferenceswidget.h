@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef ABSTRACTPREFERENCESWIDGET_H
 #define ABSTRACTPREFERENCESWIDGET_H
 
@@ -18,6 +19,9 @@ public:
 
 	/* gets the values from the interface and set in the preferences object. */
 	virtual void syncSettings() = 0;
+
+signals:
+	void settingsChanged();
 
 private:
 	QIcon _icon;

@@ -1,8 +1,9 @@
-#include "divecomputermodel.h"
-#include "dive.h"
-#include "divelist.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/divecomputermodel.h"
+#include "core/dive.h"
+#include "core/divelist.h"
 
-DiveComputerModel::DiveComputerModel(QMultiMap<QString, DiveComputerNode> &dcMap, QObject *parent) : CleanerTableModel()
+DiveComputerModel::DiveComputerModel(QMultiMap<QString, DiveComputerNode> &dcMap, QObject *parent) : CleanerTableModel(parent)
 {
 	setHeaderDataStrings(QStringList() << "" << tr("Model") << tr("Device ID") << tr("Nickname"));
 	dcWorkingMap = dcMap;
@@ -47,6 +48,7 @@ QVariant DiveComputerModel::data(const QModelIndex &index, int role) const
 
 int DiveComputerModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return numRows;
 }
 
@@ -78,6 +80,10 @@ Qt::ItemFlags DiveComputerModel::flags(const QModelIndex &index) const
 
 bool DiveComputerModel::setData(const QModelIndex &index, const QVariant &value, int role)
 {
+	// We should test if the role == Qt::EditRole
+	Q_UNUSED(role);
+
+	// WARN: This seems wrong - The values don't are ordered - we need a map from the Key to Index, or something.
 	QList<DiveComputerNode> values = dcWorkingMap.values();
 	DiveComputerNode node = values.at(index.row());
 	dcWorkingMap.remove(node.model, node);

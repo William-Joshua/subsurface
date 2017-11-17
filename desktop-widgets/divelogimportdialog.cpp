@@ -1,35 +1,44 @@
-#include "divelogimportdialog.h"
-#include "mainwindow.h"
-#include "color.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/divelogimportdialog.h"
+#include "desktop-widgets/mainwindow.h"
+#include "core/color.h"
 #include "ui_divelogimportdialog.h"
 #include <QShortcut>
 #include <QDrag>
 #include <QMimeData>
+#include <QRegExp>
+#include "core/qthelper.h"
 
 static QString subsurface_mimedata = "subsurface/csvcolumns";
 static QString subsurface_index = "subsurface/csvindex";
 
+#define SILENCE_WARNING 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, ""
+
 const DiveLogImportDialog::CSVAppConfig DiveLogImportDialog::CSVApps[CSVAPPS] = {
 	// time, depth, temperature, po2, sensor1, sensor2, sensor3, cns, ndl, tts, stopdepth, pressure, setpoint
 	// indices are 0 based, -1 means the column doesn't exist
-	{ "Manual import", },
+	{ "Manual import", SILENCE_WARNING },
 	{ "APD Log Viewer - DC1", 0, 1, 15, 6, 3, 4, 5, 17, -1, -1, 18, -1, 2, "Tab" },
 	{ "APD Log Viewer - DC2", 0, 1, 15, 6, 7, 8, 9, 17, -1, -1, 18, -1, 2, "Tab" },
+	{ "DL7", 1, 2, -1, -1, -1, -1, -1, -1, -1, 8, -1, 10, -1, "|" },
 	{ "XP5", 0, 1, 9, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, "Tab" },
 	{ "SensusCSV", 9, 10, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, "," },
 	{ "Seabear CSV", 0, 1, 5, -1, -1, -1, -1, -1, 2, 3, 4, 6, -1, ";" },
 	{ "SubsurfaceCSV", -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, "Tab" },
-	{ NULL, }
+	{ "AV1", 0, 1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, " " },
+	{ NULL, SILENCE_WARNING }
 };
 
 enum Known {
 	MANUAL,
 	APD,
 	APD2,
+	DL7,
 	XP5,
 	SENSUS,
 	SEABEAR,
-	SUBSURFACE
+	SUBSURFACE,
+	AV1
 };
 
 ColumnNameProvider::ColumnNameProvider(QObject *parent) : QAbstractListModel(parent)
@@ -44,6 +53,8 @@ ColumnNameProvider::ColumnNameProvider(QObject *parent) : QAbstractListModel(par
 
 bool ColumnNameProvider::insertRows(int row, int count, const QModelIndex &parent)
 {
+	Q_UNUSED(count)
+	Q_UNUSED(parent)
 	beginInsertRows(QModelIndex(), row, row);
 	columnNames.append(QString());
 	endInsertRows();
@@ -52,6 +63,8 @@ bool ColumnNameProvider::insertRows(int row, int count, const QModelIndex &paren
 
 bool ColumnNameProvider::removeRows(int row, int count, const QModelIndex &parent)
 {
+	Q_UNUSED(count)
+	Q_UNUSED(parent)
 	beginRemoveRows(QModelIndex(), row, row);
 	columnNames.removeAt(row);
 	endRemoveRows();
@@ -100,6 +113,7 @@ int ColumnNameProvider::mymatch(QString value) const
 
 ColumnNameView::ColumnNameView(QWidget *parent)
 {
+	Q_UNUSED(parent)
 	setAcceptDrops(true);
 	setDragEnabled(true);
 }
@@ -161,6 +175,7 @@ void ColumnNameView::dropEvent(QDropEvent *event)
 
 ColumnDropCSVView::ColumnDropCSVView(QWidget *parent)
 {
+	Q_UNUSED(parent)
 	setAcceptDrops(true);
 }
 
@@ -331,15 +346,18 @@ DiveLogImportDialog::DiveLogImportDialog(QStringList fn, QWidget *parent) : QDia
 	column = 0;
 	delta = "0";
 	hw = "";
+	txtLog = false;
 
 	/* Add indexes of XSLTs requiring special handling to the list */
 	specialCSV << SENSUS;
 	specialCSV << SUBSURFACE;
+	specialCSV << DL7;
+	specialCSV << AV1;
 
 	for (int i = 0; !CSVApps[i].name.isNull(); ++i)
 		ui->knownImports->addItem(CSVApps[i].name);
 
-	ui->CSVSeparator->addItems( QStringList() << tr("Tab") << "," << ";");
+	ui->CSVSeparator->addItems( QStringList() << tr("Tab") << "," << ";" << "|");
 
 	loadFileContents(-1, INITIAL);
 
@@ -378,6 +396,7 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 	bool seabear = false;
 	bool xp5 = false;
 	bool apd = false;
+	bool dl7 = false;
 
 	// reset everything
 	ColumnNameProvider *provider = new ColumnNameProvider(this);
@@ -459,14 +478,53 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 		blockSignals(true);
 		ui->knownImports->setCurrentText("XP5");
 		blockSignals(false);
+	} else if (firstLine.contains("FSH")) {
+		QString units = "Metric";
+		dl7 = true;
+		while ((firstLine = f.readLine().trimmed()).length() > 0 && !f.atEnd()) {
+			/* DL7 actually defines individual units (e.g. depth, temperature,
+			 * pressure, etc.) and there are quite a few other options as well,
+			 * but let's use metric unless depth unit is clearly Imperial. */
+
+			if (firstLine.contains("ThFt")) {
+				units = "Imperial";
+			}
+		}
+		firstLine = "|Sample time|Sample depth||||||Sample temperature||Sample pressure";
+		blockSignals(true);
+		ui->knownImports->setCurrentText("DL7");
+		ui->CSVUnits->setCurrentText(units);
+		blockSignals(false);
+	} else if (firstLine.contains("Life Time Dive")) {
+		txtLog = true;
+
+		while ((firstLine = f.readLine().trimmed()).length() >= 0 && !f.atEnd()) {
+			if (firstLine.contains("Dive Profile")) {
+				f.readLine();
+				break;
+			}
+		}
+		firstLine = f.readLine().trimmed();
+
 	}
+
+
 
 	// Special handling for APD Log Viewer
 	if ((triggeredBy == KNOWNTYPES && (value == APD || value == APD2)) || (triggeredBy == INITIAL && fileNames.first().endsWith(".apd", Qt::CaseInsensitive))) {
+		QString apdseparator;
+		int tabs = firstLine.count('\t');
+		int commas = firstLine.count(',');
+		if (tabs > commas)
+			apdseparator = "\t";
+		else
+			apdseparator = ",";
+
 		apd=true;
-		firstLine = "Sample time\tSample depth\tSample setpoint\tSample sensor1 pO₂\tSample sensor2 pO₂\tSample sensor3 pO₂\tSample pO₂\t\t\t\t\t\t\t\t\tSample temperature\t\tSample CNS\tSample stopdepth";
+
+		firstLine = "Sample time" + apdseparator + "Sample depth" + apdseparator + "Sample setpoint" + apdseparator + "Sample sensor1 pO₂" + apdseparator + "Sample sensor2 pO₂" + apdseparator + "Sample sensor3 pO₂" + apdseparator + "Sample pO₂" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "" + apdseparator + "Sample temperature" + apdseparator + "" + apdseparator + "Sample CNS" + apdseparator + "Sample stopdepth";
 		blockSignals(true);
-		ui->CSVSeparator->setCurrentText(tr("Tab"));
+		ui->CSVSeparator->setCurrentText(apdseparator);
 		if (triggeredBy == INITIAL && fileNames.first().contains(".apd", Qt::CaseInsensitive))
 			ui->knownImports->setCurrentText("APD Log Viewer - DC1");
 		blockSignals(false);
@@ -479,11 +537,14 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 		int tabs = firstLine.count('\t');
 		int commas = firstLine.count(',');
 		int semis = firstLine.count(';');
-		if (tabs > commas && tabs > semis)
+		int pipes = firstLine.count('|');
+		if (tabs > commas && tabs > semis && tabs > pipes)
 			separator = "\t";
-		else if (commas > tabs && commas > semis)
+		else if (commas > tabs && commas > semis && commas > pipes)
 			separator = ",";
-		else if (semis > tabs && semis > commas)
+		else if (pipes > tabs && pipes > commas && pipes > semis)
+			separator = "|";
+		else if (semis > tabs && semis > commas && semis > pipes)
 			separator = ";";
 		if (ui->CSVSeparator->currentText() != separator) {
 			blockSignals(true);
@@ -493,8 +554,14 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 		}
 	}
 	if (triggeredBy == INITIAL || (triggeredBy == KNOWNTYPES && value == MANUAL) || triggeredBy == SEPARATOR) {
+		int count = -1;
+		QString line = f.readLine().trimmed();
+		QStringList columns;
+		if (line.length() > 0)
+			columns = line.split(separator);
 		// now try and guess the columns
 		Q_FOREACH (QString columnText, currColumns) {
+			count++;
 			/*
 			 * We have to skip the conversion of 2 to ₂ for APD Log
 			 * viewer as that would mess up the sensor numbering. We
@@ -513,13 +580,28 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 				provider->removeRow(idx);
 				headers.append(foundHeading);
 				matchedSome = true;
+				if (foundHeading == QString::fromLatin1("Date") && columns.count() >= count) {
+					QString date = columns.at(count);
+					if (date.contains('-')) {
+						ui->DateFormat->setCurrentText("yyyy-mm-dd");
+
+					} else if (date.contains('/')) {
+						ui->DateFormat->setCurrentText("mm/dd/yyyy");
+					}
+				} else if (foundHeading == QString::fromLatin1("Time") && columns.count() >= count) {
+					QString time = columns.at(count);
+					if (time.contains(':')) {
+						ui->DurationFormat->setCurrentText("Minutes:seconds");
+
+					}
+				}
 			} else {
 				headers.append("");
 			}
 		}
 		if (matchedSome) {
 			ui->dragInstructions->setText(tr("Some column headers were pre-populated; please drag and drop the headers so they match the column they are in."));
-			if (triggeredBy != KNOWNTYPES && !seabear && !xp5 && !apd) {
+			if (triggeredBy != KNOWNTYPES && !seabear && !xp5 && !apd && !dl7) {
 				blockSignals(true);
 				ui->knownImports->setCurrentIndex(0); // <- that's "Manual import"
 				blockSignals(false);
@@ -528,7 +610,7 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 	}
 	if (triggeredBy == KNOWNTYPES && value != MANUAL) {
 		// an actual known type
-		if (value == SUBSURFACE) {
+		if (value == SUBSURFACE || value == APD || value == APD2) {
 			/*
 			 * Subsurface CSV file needs separator detection
 			 * as we used to default to comma but switched
@@ -633,6 +715,20 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 		 * actual data.
 		 */
 		while (strlen(f.readLine()) > 3 && !f.atEnd());
+	} else if (dl7) {
+		while ((firstLine = f.readLine().trimmed()).length() > 0 && !f.atEnd()) {
+			if (firstLine.contains("ZDP")) {
+				firstLine = f.readLine().trimmed();
+				break;
+			}
+		}
+	} else if (txtLog) {
+		while ((firstLine = f.readLine().trimmed()).length() >= 0 && !f.atEnd()) {
+			if (firstLine.contains("Dive Profile")) {
+				firstLine = f.readLine().trimmed();
+				break;
+			}
+		}
 	}
 
 	while (rows < 10 && !f.atEnd()) {
@@ -641,23 +737,24 @@ void DiveLogImportDialog::loadFileContents(int value, whatChanged triggeredBy)
 		fileColumns.append(currColumns);
 		rows += 1;
 	}
-	resultModel->setColumnValues(fileColumns);
+
+	if (rows > 0)
+		resultModel->setColumnValues(fileColumns);
 	for (int i = 0; i < headers.count(); i++)
 		if (!headers.at(i).isEmpty())
 			resultModel->setData(resultModel->index(0, i),headers.at(i),Qt::EditRole);
 }
 
-char *intdup(int index)
-{
-	char tmpbuf[21];
-
-	snprintf(tmpbuf, sizeof(tmpbuf) - 2, "%d", index);
-	tmpbuf[20] = 0;
-	return strdup(tmpbuf);
-}
-
 int DiveLogImportDialog::setup_csv_params(QStringList r, char **params, int pnr)
 {
+	params[pnr++] = strdup("dateField");
+	params[pnr++] = intdup(r.indexOf(tr("Date")));
+	params[pnr++] = strdup("datefmt");
+	params[pnr++] = intdup(ui->DateFormat->currentIndex());
+	params[pnr++] = strdup("starttimeField");
+	params[pnr++] = intdup(r.indexOf(tr("Time")));
+	params[pnr++] = strdup("numberField");
+	params[pnr++] = intdup(r.indexOf(tr("Dive #")));
 	params[pnr++] = strdup("timeField");
 	params[pnr++] = intdup(r.indexOf(tr("Sample time")));
 	params[pnr++] = strdup("depthField");
@@ -699,6 +796,51 @@ int DiveLogImportDialog::setup_csv_params(QStringList r, char **params, int pnr)
 
 	return pnr;
 }
+int DiveLogImportDialog::parseTxtHeader(QString fileName, char **params, int pnr)
+{
+	QFile f(fileName);
+	QString date;
+	QString time;
+	QString line;
+
+	f.open(QFile::ReadOnly);
+	while ((line = f.readLine().trimmed()).length() >= 0 && !f.atEnd()) {
+		if (line.contains("Dive Profile")) {
+			f.readLine();
+			break;
+		} else if (line.contains("Dive Date: ")) {
+			date = line.replace(QString::fromLatin1("Dive Date: "), QString::fromLatin1(""));
+
+			if (date.contains('-')) {
+				QStringList fmtDate = date.split('-');
+				date = fmtDate[0] + fmtDate[1] + fmtDate[2];
+			} else if (date.contains('/')) {
+				QStringList fmtDate = date.split('/');
+				date = fmtDate[2] + fmtDate[0] + fmtDate[1];
+			} else {
+				QStringList fmtDate = date.split('.');
+				date = fmtDate[2] + fmtDate[1] + fmtDate[0];
+			}
+		} else if (line.contains("Elapsed Dive Time: ")) {
+			// Skipping dive duration for now
+		} else if (line.contains("Dive Time: ")) {
+			time = line.replace(QString::fromLatin1("Dive Time: "), QString::fromLatin1(""));
+
+			if (time.contains(':')) {
+				QStringList fmtTime = time.split(':');
+				time = fmtTime[0] + fmtTime[1];
+
+			}
+		}
+	}
+	f.close();
+
+	params[pnr++] = strdup("date");
+	params[pnr++] = strdup(date.toLatin1());
+	params[pnr++] = strdup("time");
+	params[pnr++] = strdup(time.toLatin1());
+	return pnr;
+}
 
 void DiveLogImportDialog::on_buttonBox_accepted()
 {
@@ -706,62 +848,22 @@ void DiveLogImportDialog::on_buttonBox_accepted()
 	if (ui->knownImports->currentText() != "Manual import") {
 		for (int i = 0; i < fileNames.size(); ++i) {
 			if (ui->knownImports->currentText() == "Seabear CSV") {
-				char *params[40];
-				int pnr = 0;
 
-				params[pnr++] = strdup("timeField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample time")));
-				params[pnr++] = strdup("depthField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample depth")));
-				params[pnr++] = strdup("tempField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample temperature")));
-				params[pnr++] = strdup("po2Field");
-				params[pnr++] = intdup(r.indexOf(tr("Sample pO₂")));
-				params[pnr++] = strdup("o2sensor1Field");
-				params[pnr++] = intdup(r.indexOf(tr("Sample sensor1 pO₂")));
-				params[pnr++] = strdup("o2sensor2Field");
-				params[pnr++] = intdup(r.indexOf(tr("Sample sensor2 pO₂")));
-				params[pnr++] = strdup("o2sensor3Field");
-				params[pnr++] = intdup(r.indexOf(tr("Sample sensor3 pO₂")));
-				params[pnr++] = strdup("cnsField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample CNS")));
-				params[pnr++] = strdup("ndlField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample NDL")));
-				params[pnr++] = strdup("ttsField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample TTS")));
-				params[pnr++] = strdup("stopdepthField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample stopdepth")));
-				params[pnr++] = strdup("pressureField");
-				params[pnr++] = intdup(r.indexOf(tr("Sample pressure")));
-				params[pnr++] = strdup("setpointFiend");
-				params[pnr++] = intdup(-1);
-				params[pnr++] = strdup("separatorIndex");
-				params[pnr++] = intdup(ui->CSVSeparator->currentIndex());
-				params[pnr++] = strdup("units");
-				params[pnr++] = intdup(ui->CSVUnits->currentIndex());
-				params[pnr++] = strdup("delta");
-				params[pnr++] = strdup(delta.toUtf8().data());
-				if (hw.length()) {
-					params[pnr++] = strdup("hw");
-					params[pnr++] = strdup(hw.toUtf8().data());
-				}
-				params[pnr++] = NULL;
+				parse_seabear_log(fileNames[i].toUtf8().data());
 
-				if (parse_seabear_csv_file(fileNames[i].toUtf8().data(),
-							params, pnr - 1, "csv") < 0) {
-					return;
-				}
-				// Seabear CSV stores NDL and TTS in Minutes, not seconds
-				struct dive *dive = dive_table.dives[dive_table.nr - 1];
-				for(int s_nr = 0 ; s_nr <= dive->dc.samples ; s_nr++) {
-					struct sample *sample = dive->dc.sample + s_nr;
-					sample->ndl.seconds *= 60;
-					sample->tts.seconds *= 60;
-				}
 			} else {
-				char *params[37];
+				char *params[49];
 				int pnr = 0;
 
+				QRegExp apdRe("^.*[/\\][0-9a-zA-Z]*_([0-9]{6})_([0-9]{6})\\.apd");
+				if (txtLog) {
+					pnr = parseTxtHeader(fileNames[i], params, pnr);
+				} else if (apdRe.exactMatch(fileNames[i])) {
+					params[pnr++] = strdup("date");
+					params[pnr++] = strdup("20" + apdRe.cap(1).toLatin1());
+					params[pnr++] = strdup("time");
+					params[pnr++] = strdup("1" + apdRe.cap(2).toLatin1());
+				}
 				pnr = setup_csv_params(r, params, pnr);
 				parse_csv_file(fileNames[i].toUtf8().data(), params, pnr - 1,
 						specialCSV.contains(ui->knownImports->currentIndex()) ? CSVApps[ui->knownImports->currentIndex()].name.toUtf8().data() : "csv");
@@ -826,9 +928,18 @@ void DiveLogImportDialog::on_buttonBox_accepted()
 
 				parse_manual_file(fileNames[i].toUtf8().data(), params, pnr - 1);
 			} else {
-				char *params[37];
+				char *params[51];
 				int pnr = 0;
 
+				QRegExp apdRe("^.*[/\\][0-9a-zA-Z]*_([0-9]{6})_([0-9]{6})\\.apd");
+				if (txtLog) {
+					pnr = parseTxtHeader(fileNames[i], params, pnr);
+				} else if (apdRe.exactMatch(fileNames[i])) {
+					params[pnr++] = strdup("date");
+					params[pnr++] = strdup("20" + apdRe.cap(1).toLatin1());
+					params[pnr++] = strdup("time");
+					params[pnr++] = strdup("1" + apdRe.cap(2).toLatin1());
+				}
 				pnr = setup_csv_params(r, params, pnr);
 				parse_csv_file(fileNames[i].toUtf8().data(), params, pnr - 1,
 						specialCSV.contains(ui->knownImports->currentIndex()) ? CSVApps[ui->knownImports->currentIndex()].name.toUtf8().data() : "csv");

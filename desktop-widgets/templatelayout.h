@@ -1,12 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef TEMPLATELAYOUT_H
 #define TEMPLATELAYOUT_H
 
 #include <grantlee_templates.h>
 #include "mainwindow.h"
 #include "printoptions.h"
-#include "statistics.h"
-#include "qthelper.h"
-#include "helpers.h"
+#include "core/statistics.h"
+#include "core/qthelper.h"
+#include "core/helpers.h"
+#include "core/subsurface-qt/DiveObjectHelper.h"
 
 int getTotalWork(print_options *printOptions);
 void find_all_templates();
@@ -44,45 +46,9 @@ public:
 	~YearInfo();
 };
 
-Q_DECLARE_METATYPE(Dive)
 Q_DECLARE_METATYPE(template_options)
 Q_DECLARE_METATYPE(print_options)
 Q_DECLARE_METATYPE(YearInfo)
-
-GRANTLEE_BEGIN_LOOKUP(Dive)
-if (property == "number")
-	return object.number();
-else if (property == "id")
-	return object.id();
-else if (property == "date")
-	return object.date();
-else if (property == "time")
-	return object.time();
-else if (property == "location")
-	return object.location();
-else if (property == "duration")
-	return object.duration();
-else if (property == "depth")
-	return object.depth();
-else if (property == "divemaster")
-	return object.divemaster();
-else if (property == "buddy")
-	return object.buddy();
-else if (property == "airTemp")
-	return object.airTemp();
-else if (property == "waterTemp")
-	return object.waterTemp();
-else if (property == "notes")
-	return object.notes();
-else if (property == "rating")
-	return object.rating();
-else if (property == "sac")
-	return object.sac();
-else if (property == "tags")
-	return object.tags();
-else if (property == "gas")
-	return object.gas();
-GRANTLEE_END_LOOKUP
 
 GRANTLEE_BEGIN_LOOKUP(template_options)
 if (property == "font") {
@@ -143,7 +109,8 @@ if (property == "year") {
 	double temp = get_temp_units(object.year->max_temp, &unit);
 	return object.year->max_temp == 0 ? "0" : QString::number(temp, 'g', 2) + unit;
 } else if (property == "total_time") {
-	return get_time_string(object.year->total_time.seconds, 0);
+	return get_dive_duration_string(object.year->total_time.seconds, QObject::tr("h"),
+									QObject::tr("min"), QObject::tr("sec"), " ");
 } else if (property == "avg_time") {
 	return get_minutes(object.year->total_time.seconds / object.year->selection_size);
 } else if (property == "shortest_time") {

@@ -1,19 +1,17 @@
-#include "modeldelegates.h"
-#include "dive.h"
-#include "gettextfromc.h"
-#include "mainwindow.h"
-#include "cylindermodel.h"
-#include "models.h"
-#include "starwidget.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/modeldelegates.h"
+#include "core/dive.h"
+#include "core/gettextfromc.h"
+#include "desktop-widgets/mainwindow.h"
+#include "qt-models/cylindermodel.h"
+#include "qt-models/models.h"
+#include "desktop-widgets/starwidget.h"
 #include "profile-widget/profilewidget2.h"
-#include "tankinfomodel.h"
-#include "weigthsysteminfomodel.h"
-#include "weightmodel.h"
-#include "divetripmodel.h"
-#include "qthelper.h"
-#ifndef NO_MARBLE
-#include "globe.h"
-#endif
+#include "qt-models/tankinfomodel.h"
+#include "qt-models/weigthsysteminfomodel.h"
+#include "qt-models/weightmodel.h"
+#include "qt-models/divetripmodel.h"
+#include "core/qthelper.h"
 
 #include <QCompleter>
 #include <QKeyEvent>
@@ -26,6 +24,8 @@
 
 QSize DiveListDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
+	Q_UNUSED(option)
+	Q_UNUSED(index)
 	return QSize(50, 22);
 }
 
@@ -68,6 +68,8 @@ void StarWidgetsDelegate::paint(QPainter *painter, const QStyleOptionViewItem &o
 
 QSize StarWidgetsDelegate::sizeHint(const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
+	Q_UNUSED(option)
+	Q_UNUSED(index)
 	return minStarSize;
 }
 
@@ -76,8 +78,9 @@ const QSize& StarWidgetsDelegate::starSize() const
 	return minStarSize;
 }
 
-ComboBoxDelegate::ComboBoxDelegate(QAbstractItemModel *model, QObject *parent) : QStyledItemDelegate(parent), model(model)
+ComboBoxDelegate::ComboBoxDelegate(QAbstractItemModel *model, QObject *parent, bool allowEdit) : QStyledItemDelegate(parent), model(model)
 {
+	editable = allowEdit;
 	connect(this, SIGNAL(closeEditor(QWidget *, QAbstractItemDelegate::EndEditHint)),
 		this, SLOT(revertModelData(QWidget *, QAbstractItemDelegate::EndEditHint)));
 	connect(this, SIGNAL(closeEditor(QWidget *, QAbstractItemDelegate::EndEditHint)),
@@ -106,7 +109,7 @@ struct CurrSelected {
 
 QWidget *ComboBoxDelegate::createEditor(QWidget *parent, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
-	MainWindow *m = MainWindow::instance();
+	Q_UNUSED(option)
 	QComboBox *comboDelegate = new QComboBox(parent);
 	comboDelegate->setModel(model);
 	comboDelegate->setEditable(true);
@@ -115,8 +118,7 @@ QWidget *ComboBoxDelegate::createEditor(QWidget *parent, const QStyleOptionViewI
 	comboDelegate->completer()->setCompletionMode(QCompleter::PopupCompletion);
 	comboDelegate->view()->setEditTriggers(QAbstractItemView::AllEditTriggers);
 	comboDelegate->lineEdit()->installEventFilter(const_cast<QObject *>(qobject_cast<const QObject *>(this)));
-	if ((m->graphics()->currentState != ProfileWidget2::PROFILE))
-		comboDelegate->lineEdit()->setEnabled(false);
+	comboDelegate->lineEdit()->setEnabled(editable);
 	comboDelegate->view()->installEventFilter(const_cast<QObject *>(qobject_cast<const QObject *>(this)));
 	QAbstractItemView *comboPopup = comboDelegate->lineEdit()->completer()->popup();
 	comboPopup->setMouseTracking(true);
@@ -220,6 +222,7 @@ bool ComboBoxDelegate::eventFilter(QObject *object, QEvent *event)
 
 void ComboBoxDelegate::updateEditorGeometry(QWidget *editor, const QStyleOptionViewItem &option, const QModelIndex &index) const
 {
+	Q_UNUSED(index)
 	QRect defaultRect = option.rect;
 	defaultRect.setX(defaultRect.x() - 1);
 	defaultRect.setY(defaultRect.y() - 1);
@@ -236,6 +239,10 @@ struct RevertCylinderData {
 
 void TankInfoDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &thisindex) const
 {
+	Q_UNUSED(model)
+	Q_UNUSED(editor)
+	Q_UNUSED(thisindex)
+
 	CylindersModel *mymodel = qobject_cast<CylindersModel *>(currCombo.model);
 	TankInfoModel *tanks = TankInfoModel::instance();
 	QModelIndexList matches = tanks->match(tanks->index(0, 0), Qt::DisplayRole, currCombo.activeText);
@@ -257,7 +264,7 @@ void TankInfoDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, 
 	mymodel->passInData(IDX(CylindersModel::SIZE), tankSize);
 }
 
-TankInfoDelegate::TankInfoDelegate(QObject *parent) : ComboBoxDelegate(TankInfoModel::instance(), parent)
+TankInfoDelegate::TankInfoDelegate(QObject *parent) : ComboBoxDelegate(TankInfoModel::instance(), parent, true)
 {
 	connect(this, SIGNAL(closeEditor(QWidget *, QAbstractItemDelegate::EndEditHint)),
 		this, SLOT(reenableReplot(QWidget *, QAbstractItemDelegate::EndEditHint)));
@@ -265,6 +272,8 @@ TankInfoDelegate::TankInfoDelegate(QObject *parent) : ComboBoxDelegate(TankInfoM
 
 void TankInfoDelegate::reenableReplot(QWidget *widget, QAbstractItemDelegate::EndEditHint hint)
 {
+	Q_UNUSED(widget)
+	Q_UNUSED(hint)
 	MainWindow::instance()->graphics()->setReplot(true);
 	// FIXME: We need to replot after a cylinder is selected but the replot below overwrites
 	//        the newly selected cylinder.
@@ -273,6 +282,7 @@ void TankInfoDelegate::reenableReplot(QWidget *widget, QAbstractItemDelegate::En
 
 void TankInfoDelegate::revertModelData(QWidget *widget, QAbstractItemDelegate::EndEditHint hint)
 {
+	Q_UNUSED(widget)
 	if (hint == QAbstractItemDelegate::NoHint ||
 	    hint == QAbstractItemDelegate::RevertModelCache) {
 		CylindersModel *mymodel = qobject_cast<CylindersModel *>(currCombo.model);
@@ -302,6 +312,8 @@ TankUseDelegate::TankUseDelegate(QObject *parent) : QStyledItemDelegate(parent)
 
 QWidget *TankUseDelegate::createEditor(QWidget * parent, const QStyleOptionViewItem & option, const QModelIndex & index) const
 {
+	Q_UNUSED(option)
+	Q_UNUSED(index)
 	QComboBox *comboBox = new QComboBox(parent);
 	for (int i = 0; i < NUM_GAS_USE; i++)
 		comboBox->addItem(gettextFromC::instance()->trGettext(cylinderuse_text[i]));
@@ -328,6 +340,7 @@ struct RevertWeightData {
 
 void WSInfoDelegate::revertModelData(QWidget *widget, QAbstractItemDelegate::EndEditHint hint)
 {
+	Q_UNUSED(widget)
 	if (hint == QAbstractItemDelegate::NoHint ||
 	    hint == QAbstractItemDelegate::RevertModelCache) {
 		WeightModel *mymodel = qobject_cast<WeightModel *>(currCombo.model);
@@ -338,6 +351,10 @@ void WSInfoDelegate::revertModelData(QWidget *widget, QAbstractItemDelegate::End
 
 void WSInfoDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &thisindex) const
 {
+	Q_UNUSED(editor)
+	Q_UNUSED(model)
+	Q_UNUSED(thisindex)
+
 	WeightModel *mymodel = qobject_cast<WeightModel *>(currCombo.model);
 	WSInfoModel *wsim = WSInfoModel::instance();
 	QModelIndexList matches = wsim->match(wsim->index(0, 0), Qt::DisplayRole, currCombo.activeText);
@@ -357,7 +374,7 @@ void WSInfoDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, co
 	mymodel->passInData(IDX(WeightModel::WEIGHT), grams);
 }
 
-WSInfoDelegate::WSInfoDelegate(QObject *parent) : ComboBoxDelegate(WSInfoModel::instance(), parent)
+WSInfoDelegate::WSInfoDelegate(QObject *parent) : ComboBoxDelegate(WSInfoModel::instance(), parent, true)
 {
 }
 
@@ -374,6 +391,8 @@ QWidget *WSInfoDelegate::createEditor(QWidget *parent, const QStyleOptionViewIte
 
 void AirTypesDelegate::revertModelData(QWidget *widget, QAbstractItemDelegate::EndEditHint hint)
 {
+	Q_UNUSED(widget)
+	Q_UNUSED(hint)
 }
 
 void AirTypesDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, const QModelIndex &index) const
@@ -381,45 +400,11 @@ void AirTypesDelegate::setModelData(QWidget *editor, QAbstractItemModel *model, 
 	if (!index.isValid())
 		return;
 	QComboBox *combo = qobject_cast<QComboBox *>(editor);
-	model->setData(index, QVariant(combo->currentText()));
+	model->setData(index, QVariant(combo->currentIndex()));
 }
 
-AirTypesDelegate::AirTypesDelegate(QObject *parent) : ComboBoxDelegate(GasSelectionModel::instance(), parent)
+AirTypesDelegate::AirTypesDelegate(QObject *parent) : ComboBoxDelegate(GasSelectionModel::instance(), parent, false)
 {
-}
-
-ProfilePrintDelegate::ProfilePrintDelegate(QObject *parent) : QStyledItemDelegate(parent)
-{
-}
-
-static void paintRect(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index)
-{
-	const QRect rect(option.rect);
-	const int row = index.row();
-	const int col = index.column();
-
-	painter->save();
-	// grid color
-	painter->setPen(QPen(QColor(0xff999999)));
-	// horizontal lines
-	if (row == 2 || row == 4 || row == 6)
-		painter->drawLine(rect.topLeft(), rect.topRight());
-	if (row == 7)
-		painter->drawLine(rect.bottomLeft(), rect.bottomRight());
-	// vertical lines
-	if (row > 1) {
-		painter->drawLine(rect.topLeft(), rect.bottomLeft());
-		if (col == 4 || (col == 0 && row > 5))
-			painter->drawLine(rect.topRight(), rect.bottomRight());
-	}
-	painter->restore();
-}
-
-/* this method overrides the default table drawing method and places grid lines only at certain rows and columns */
-void ProfilePrintDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &index) const
-{
-	paintRect(painter, option, index);
-	QStyledItemDelegate::paint(painter, option, index);
 }
 
 SpinBoxDelegate::SpinBoxDelegate(int min, int max, int step, QObject *parent):
@@ -454,40 +439,9 @@ QWidget *DoubleSpinBoxDelegate::createEditor(QWidget *parent, const QStyleOption
 	return w;
 }
 
-HTMLDelegate::HTMLDelegate(QObject *parent) : ProfilePrintDelegate(parent)
-{
-}
-
-void HTMLDelegate::paint(QPainter* painter, const QStyleOptionViewItem & option, const QModelIndex &index) const
-{
-	paintRect(painter, option, index);
-	QStyleOptionViewItemV4 options = option;
-	initStyleOption(&options, index);
-	painter->save();
-	QTextDocument doc;
-	doc.setHtml(options.text);
-	doc.setTextWidth(options.rect.width());
-	doc.setDefaultFont(options.font);
-	options.text.clear();
-	options.widget->style()->drawControl(QStyle::CE_ItemViewItem, &options, painter);
-	painter->translate(options.rect.left(), options.rect.top());
-	QRect clip(0, 0, options.rect.width(), options.rect.height());
-	doc.drawContents(painter, clip);
-	painter->restore();
-}
-
-QSize HTMLDelegate::sizeHint ( const QStyleOptionViewItem & option, const QModelIndex & index ) const
-{
-	QStyleOptionViewItemV4 options = option;
-	initStyleOption(&options, index);
-	QTextDocument doc;
-	doc.setHtml(options.text);
-	doc.setTextWidth(options.rect.width());
-	return QSize(doc.idealWidth(), doc.size().height());
-}
-
 LocationFilterDelegate::LocationFilterDelegate(QObject *parent)
 {
+	Q_UNUSED(parent)
 }
 
 void LocationFilterDelegate::paint(QPainter *painter, const QStyleOptionViewItem &option, const QModelIndex &origIdx) const
@@ -495,7 +449,7 @@ void LocationFilterDelegate::paint(QPainter *painter, const QStyleOptionViewItem
 	QFont fontBigger = qApp->font();
 	QFont fontSmaller = qApp->font();
 	QFontMetrics fmBigger(fontBigger);
-	QStyleOptionViewItemV4 opt = option;
+	QStyleOptionViewItem opt = option;
 	const QAbstractProxyModel *proxyModel = dynamic_cast<const QAbstractProxyModel*>(origIdx.model());
 	QModelIndex index = proxyModel->mapToSource(origIdx);
 	QStyledItemDelegate::initStyleOption(&opt, index);
@@ -569,18 +523,18 @@ print_part:
 	if (option.state & QStyle::State_Selected) {
 		painter->setPen(QPen(opt.palette.highlight().color().darker()));
 		painter->setBrush(opt.palette.highlight());
-		const qreal pad = 1.0;
-		const qreal pad2 = pad * 2.0;
-		const qreal rounding = 5.0;
+		const int pad = 1;
+		const int pad2 = pad * 2;
+		const int rounding = 5;
 		painter->drawRoundedRect(option.rect.x() + pad,
-			option.rect.y() + pad,
-			option.rect.width() - pad2,
-			option.rect.height() - pad2,
-			rounding, rounding);
+					option.rect.y() + pad,
+					option.rect.width() - pad2,
+					option.rect.height() - pad2,
+					rounding, rounding);
 	}
 	painter->setPen(textPen);
 	painter->setFont(fontBigger);
-	const qreal textPad = 5.0;
+	const int textPad = 5;
 	painter->drawText(option.rect.x() + textPad, option.rect.y() + fmBigger.boundingRect("YH").height(), diveSiteName);
 	double pointSize = fontSmaller.pointSizeF();
 	fontSmaller.setPointSizeF(0.9 * pointSize);

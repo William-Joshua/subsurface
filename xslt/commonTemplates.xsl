@@ -127,7 +127,7 @@
 
       <!-- Handling last value -->
       <xsl:when test="count($values) = 1">
-        <xsl:value-of select="format-number($value + $sum, '#.#')"/>
+        <xsl:value-of select="format-number($value + $sum, '#.###')"/>
       </xsl:when>
 
       <!-- More than one value to sum -->
@@ -187,7 +187,7 @@
         <xsl:when test="$mnth = 'Jun'">6</xsl:when>
         <xsl:when test="$mnth = 'Jul'">7</xsl:when>
         <xsl:when test="$mnth = 'Aug'">8</xsl:when>
-        <xsl:when test="$mnth = 'Sept'">9</xsl:when>
+        <xsl:when test="$mnth = 'Sep'">9</xsl:when>
         <xsl:when test="$mnth = 'Oct'">10</xsl:when>
         <xsl:when test="$mnth = 'Nov'">11</xsl:when>
         <xsl:when test="$mnth = 'Dec'">12</xsl:when>
@@ -259,7 +259,7 @@
                 <xsl:value-of select="substring-before($line,$fs)"/>
               </xsl:when>
               <xsl:otherwise>
-                <xsl:if test="substring-after($line, $fs) = ''">
+                <xsl:if test="substring-after($line, $fs) = '' and $line != $fs">
                   <xsl:value-of select="$line"/>
                 </xsl:if>
               </xsl:otherwise>

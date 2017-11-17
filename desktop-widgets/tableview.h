@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef TABLEVIEW_H
 #define TABLEVIEW_H
 
@@ -9,7 +10,7 @@
 
 #include "ui_tableview.h"
 
-#include "metrics.h"
+#include "core/metrics.h"
 
 class QPushButton;
 class QAbstractItemModel;

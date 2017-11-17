@@ -1,0 +1,8 @@
+{"alwaysNotifyForPaths": [
+    {
+      "name": "atdotde",
+      "files": ["**/*plan*", "**/deco*"],
+      "skipTeamPrs": false
+    }
+  ]
+}

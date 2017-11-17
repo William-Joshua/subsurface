@@ -1,23 +1,338 @@
-// _Subsurface_ 4.61 Release Notes
+// _Subsurface_ 4.7.5 Release Notes
 
-_Subsurface_ 4.6 - some day 2015
----------------------------------
+_Subsurface_ 4.7.5 - Month dd, 2017
+------------------------------------------
+
+Some of the changes since _Subsurface_ 4.7.4
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Limit min. GFlow to 10 and min. GFhigh to 40 in preferences for profile
+  and planner
+- Fix issues related to debug logging on Windows
+- Add "Bluetooth mode" in the BT selection dialog: Auto, LE, Classical
+
+
+_Subsurface_ 4.7.4 - November 11, 2017
+------------------------------------------
+
+Some of the changes since _Subsurface_ 4.7.2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Small UI fixes
+- Improvement to oxygen breaks code in planner
+- Write log messages into files when not started from a console on Windows
+- Improved detection of OpenGL versions (prevents potential crash on more
+  operating systems with ancient gfx drivers)
+- Improve the map widget editing behavior. Allow updating the location of
+  a marker that is being edited by entering new coordinates in the text field
+  in "real-time". Also, don't place new markers at the 0,0 coordinate and
+  instead place them at the current map center.
+
+
+Some of the changes since _Subsurface_ 4.7.1
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix potential crash when running with French localization and
+  downloading dives from a dive computer
+- Fallback to old behavior if Facebook album creation fails
+- Fix UI issue when adding dives to trip below
+- Fix UI issue when closing filters
+- Add small behavior changes to the map widget
+- Change to a more consistent way to show errors in Subsurface
+- Solve several potential issues with the cloud account authentication
+  flow
+- Fix a potential problem when saving data that was loaded from a git
+  repository into cloud storage
+- Fix error where newly created cloud accounts failed to create
+  the remote repository on Windows
+- Detect and try to work around the fact that the map module requires
+  at least OpenGL 2.1 (previously Subsurface would crash when OpenGL
+  was too old - often on old Win32 versions)
+
+Some of the changes since _Subsurface_ 4.6.4
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Early and limited support for Bluetooth LE dive computers.
+  Currently BLE isn't supported at all on Windows due to lack of support
+  for Windows in the underlying toolkit that we use. BLE appears to work
+  reasonably well on Mac and works on Linux if Subsurface is built against
+  Qt 5.9.2 or newer. Older versions of Qt will give you mixed results,
+  depending on the specific dive computer you use.
+  Side note for those on Windows or a Linux distro that doesn't allow BLE
+  support just yet: you can use Subsurface-mobile 2.0 or later on Android
+  and download from your BLE dive computer there and then transfer the
+  dive data via Subsurface cloud storage.
+- New map widget. No more rotating globe, but much better support for
+  the underlying widget - so overall an improvement.
+- Many small UI fixes
+- Support for multiple tank sensors reporting pressure at the same time.
+  This is something that we hadn't seen before outside of CCR dives, but
+  some newer dive computers support this for example for side mount
+  divers. We now correctly download these data from the dive computers
+  that support it, store and retrieve the pressure data, and visualize
+  multiple tank pressure readings at the same time.
+- Dive planner
+  - Improved and more user friendly cylinder handling
+  - Print delta pressure for minimum gas calculation in results
+  - Identify overlapping dives when calculating dive plan
+  - Compute plan variations: How does decompression time change
+    due to changes of bottom time by one minute or depth by 1m?
+  - Faster planning for long decompression times
+- Option in user preferences to display units in main dive list table
+- Show green tank change icon when switching to EAN100
+- Better support for importing dive data from Shearwater desktop, DL7,
+  Datatrak and other 3rd party formats.
+- Support for OSTC 4 configuration
+- Updated Facebook support to use a newer, still actively supported API.
+- Many bug fixes
+- Added support for the following dive computers:
+  - Aqualung i200
+  - Cochran Commander II, Commander TM
+  - Dive Systems/Ratio iDive2 Deep, iDive2 Easy, iDive2 Free,
+    iDive2 Tech+, iX3M Deep, iX3M Easy, iX3M Pro Deep, iX3M Pro Easy,
+    iX3M Pro Tech+, iX3M Reb, iX3M Tech+
+  - Heinrichs Weikamp OSTC+
+  - Shearwater Perdix AI (only available where BLE is supported)
+  - Suunto D4f
+
+
+Some of the changes since _Subsurface_ 4.6.3
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Allow direct entry of dive depth and duration for manually added dives
+- Improved table labels and tooltips in planner
+- Minimum gas calculation mode in planner
+- Better handling of notes when replanning dives
+- Many consistency changes for the terms used across the application
+- Support border width setting in printing templates
+- Fix situations in which cylinder pressures would incorrectly be marked
+  in red
+- Many improvemens to CSV export and import
+- Small fixes to DivingLog import
+- Attempt to parse dive logs as Latin-1 if uft-8 parsing fails
+- Add support for importing latest Suunto DM5 format
+- Correctly sync unit system between Subsurface and Subsurface-mobile
+  (using cloud storage)
+- Fix several rounding related problems
+- Fix several potential crashes
+- Better handling of Uwatec memomouse tank pressure values
+- Better handling of Cobalt imports with unused tanks
+- libdivecomputer:
+  - fix bug in Subsurface version of libdivecomputer that could cause
+    buffer overflow
+  - several small bugfixes from upstream libdivecomputer
+
+Subsurface-mobile:
+- Fix problems with the app showing the wrong dive in the details view,
+  both when tapping on a dive in the dive list, and when rotating the
+  phone
+- Fix problem with map display when running the app in a non-English
+  locale. We now send decimal GPS coordinates to Google Maps
+- Switch to Kirigami 2
+- Fix numerous small UI issues around editing and adding dives.
+
+
+Some of the changes since _Subsurface_ 4.6.2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix cloud storage access for users with non-ASCII paths on Windows
+- Allow using ctrl-scrollwheel to scale the font size of dive plan notes
+  both in the UI and when printing
+- Ensure that keyboard shortcuts via Ctrl/Cmd work in localized versions
+  of Subsurface
+- Improve a number of UI strings for consistency and typos
+- Make sure column labels for cylinder table get translated
+- Improve dive merging: deal with water temperature, better handling of
+  dive sites
+- Fix typo in saturation / desaturation rates used in Buehlmann
+  calculations; this has a small impact on some dive plan deco times
+- Improve some icons used in Preferences dialog
+- Fix CSV export of weights in lbs
+- Various small fixes
+- Massive improvements for several of the translations
+- Update Russian user manual
+- Add Catalan translation
+
+Some of the changes since _Subsurface_ 4.6.1
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Planner: update altitude limits with unit change
+- Fix potential crash when merging dives
+- Handle dive dates before 1970 correctly
+- Include geo location when exporting to divelogs.de
+- Add credits button to about screen
+- Many updated translations (and add Greek as partially supported language)
+
+Some of the changes since _Subsurface_ 4.6
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix problems with incomplete localization in Windows builds
+- Fix Seabear import issues
+- Prevent double click on dive number in dive list from (temporarily) editing
+  dive number
+- Improve cylinder handling when merging dives
+- Store a few more preferences in the cloud storage so we can match
+  certain aspects of the profile configuration in Subsurface-mobile
+- Fix scaling issue that prevent the visual dive editor from reaching
+  certain dive durations
+- Many fixes and improvements in the dive planner:
+  - Fix uninitialized variable that could cause odd problems in the planner
+    when the dive list was empty
+  - Changed VPM-B calculation for repetitive dives: Resets the maximum
+    crushing pressures and the maximal ambient pressure between repetitive
+    dives to prevent anomalies that a dive produces a shorter deco when
+    following another one than without
+  - Allow the user to disable tanks while planning dives (this makes it much
+    easier to evaluate different scenarios)
+  - Re-enable ctrl-click to remove remaining dive points in planner
+  - Improve printed dive plan (no more 0-length segments at gas changes)
+  - Print additional information with the dive plan (assumed SAC values,
+    altiude)
+- Fixes for dive computer support and new dive computer support (through
+  the great work of libdivecomputer)
+  - add support for Aqualung i450T, i550, and i750TC
+  - add support for Cressi Drake
+  - add support for Hollis DG02
+  - add support for Oceanic F10
+  - fixes for Hollis DG03
+
+Some of the changes since _Subsurface_ 4.6 Beta 2
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Many updates and improvements to the user mannual
+- Many translation updates
+- Improved OSTC 4 support
+- Bugfix for parsing AP Divesight dive log
+- Fix deco algorithm confusion between planner and log
+- Display surface interval in planner
+
+Some of the changes since _Subsurface_ 4.6 Beta 1
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Add support for importing Underwater Technologies AV1 log files
+- Fixed problems posting to Facebook
+- Fixed problems opening pictures from picture tab
+- Improvements to OSTC firmware update handling
+- Small improvements to dive planner (show repetitive dives)
+- Fix surface pressure in dive planner
+- Updated Windows and Mac binaries to Qt 5.7.1 (and newer versions of
+  several other support libraries).
+
+Some of the changes since _Subsurface_ 4.5.6
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fixed spurious errors when saving to cloud storage
+- Better handling of slow network connections when using cloud storage
+- Add --cloud-timeout= command line argument that allows to wait longer
+  (or shorter, for that matter) before we time out waiting for cloud
+  storage. Very useful when in areas with poor internet connectivity
+- Add --user= command line argument that allows switching between
+  different users from the command line
+- Many fixes to CVS importer
+- DAN DL7 import
+- SmartTrack .slg import
+- Fixes to Divelogs.de import and export
+- Fixes to UDDF exporter
+- Small fix to Uemis downloader for yet another corner case (Uemis
+  downloader is known to be broken for some users - it is no longer
+  actively maintained)
+- Improved handling of dive computer events (grouping them into info,
+  warning and alert - best supported on Suunto EON Steel)
+- Add heatmap visualization of deco tissue loading
+- Many small fixes to the dive planner
+- Many fixes for various errors
+- Added support for additional divecomputers
+  - aqualand: Citizen Hyper Aqualand
+  - meridian: Scubapro Mantis
+  - nitekq: Dive Rite NiTek Q, NikTek Trio
+  - Aeris: 500 AI, XR-1 NX
+  - Aqualung: i300, i550T
+  - Beuchat: Mundial 2, Mundial 3, Voyager 2G
+  - Cressi: Giotto
+  - Hollis: TX1
+  - Mares: Airlab, Smart Apnea, Puck 2
+  - Oceanic: OCi
+  - Scubapro: XTender 5
+  - Sherwood: Amphos, Amphos Air, Vision
+  - Subgear: XP-3G, XP-Air
+  - Uwatec: Aladin 2G
+
+Some of the changes since _Subsurface_ 4.5.5
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Fix crash when downloading from Bluetooth based dive computers
+- Small fixes to VPM-B ceiling calculations
+- Import picture URLs from divelogs.de
+- Add support for the new version of the Suunto DX
+- Don't get caught in endless loop of git authentication errors
+- Fix time parsing of Divesoft Freedom
+- Support DAN DL7 import
+
+
+Some of the changes since _Subsurface_ 4.5.4
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update to latest libdivecomputer which adds support for Cochran
+  Commander and EMC, Uwatec Aladin Sport, Suunto Zoop/Vyper Novo,
+  Suunto D4i and D6i with latest firmware, Heinrichs & Weikamp OSTC4,
+  Aqualung i450T and Cressi Newton.
+- In the dive planner, switch pressure unit when planning in recreational
+  mode and setting a tank reserve
+- In the dive planner, show the correct VPM-B + conservatism on the
+  profile when planning in VPM-B mode and show the planner specific
+  gradient factors in Bühlman mode.
+- Enable showing a VPM-B based "ceiling" on the profile
+- Fix bug regarding depth parameter in OSTC/OSTC3 configuration
+- Fix bug in CSV export
+- Fix bugs in Suunto DM5 import
+- Fix potential race when immediately switching to Add dive or Planner
+  while accessing cloud storage
+- Fix issue for some users with cloud storage passwords
+
+
+Some of the changes since _Subsurface_ 4.5.3
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+- Update to latest libdivecomputer to fix a number of issues in the
+  parsing of dive computer data (Shearmos Amphos Air, Shearwater Predator,
+  several Oceanic models)
+- Add support for Oceanic / Aeris F11, DiveSystem iX3M, Shearwater Perdix
+- Fix several issues with imports from CSV, divelogs.de and other sources
+- Add better support for OSTC3 configuration
+- Fix potential rounding error when exporting weight systems
+- If XML file contains actual salinity (instead of the density value that
+  we call salinity), correctly interpret that value
+- Add statistics by dive type
+- Small UI fixes
+
 
 Some of the changes since _Subsurface_ 4.5.2
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- major overhaul of the Subsurface-mobile UI
-- more fixes for oddities in the Uemis download
+- Fix confusing warning about different number of tanks and gases on some
+  Suunto dive computers
+- Fix missing temperatures on some Suunto dive computers
+- Fix several corner cases in the Uemis support
+- Fix a few random UI inconsistencies (UI elements not being cleared /
+  removed / reset in certain circumstances)
+- Cloud storage: no longer store picture binary data in the Subsurface
+  cloud storage - this can cause excessively long sync times
+- When matching dive site names when entering a location name, match
+  anywhere in the location name, not just from the beginning (this makes
+  it much easier to find existing dive locations if you remember only part
+  of the name)
+- Some fixes for importing data from other formats
+- English user manual has been updated for language consistency and
+  readability
 
 Some of the changes since _Subsurface_ 4.5.1
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-- No changes in Subsurface (in fact the same sources), but libdivecomputer
-  was updated to support the latest firmware versions in the OSTC family
-  of dive computers (plus a few other minor changes)
+- No code changes to Subsurface, just an update to libdivecomputer and new
+  binaries on all platforms.
 
-Some of the changes since _Subsurface_ 4.5.0
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Some of the changes since _Subsurface_ 4.5
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 - Subsurface no longer crashes on Windows when run in the German
   localization and using the planner

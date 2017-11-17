@@ -2,9 +2,8 @@ Building Subsurface from Source
 ===============================
 
 Subsurface uses quite a few open source libraries and frameworks to do its
-job. The most important ones include libdivecomputer, Qt, Marble
-(more precisely libmarblewidget), libxml2, libxslt, libsqlite3, libzip,
-libgrantlee5 and libgit2.
+job. The most important ones include libdivecomputer, Qt, libxml2, libxslt,
+libsqlite3, libzip, libgrantlee5 and libgit2.
 
 Below are instructions for building Subsurface under some popular
 Linux distributions, for building Subsurface using Homebrew on a Mac,
@@ -14,10 +13,8 @@ Subsurface natively under Windows, so we don't support that at all.
 
 All of the prebuilt binaries that we provide (right now Windows, Mac,
 Ubuntu/Debian/LinuxMint, and openSUSE/Fedora) are built using our own
-custom "flavors" of libdivecomputer and libmarblewidget. You can get
-these from
+custom "flavors" of libdivecomputer. You can get these from
 
-git://git.subsurface-divelog.org/marble (in the Subsurface-branch branch)
 git://git.subsurface-divelog.org/libdc (in the Subsurface-branch branch)
 
 Those branches won't have a pretty history and will include ugly merges,
@@ -75,10 +72,10 @@ On Fedora you need
 
 sudo yum install git gcc-c++ make autoconf automake libtool cmake \
 	libzip-devel libxml2-devel libxslt-devel libsqlite3x-devel \
-	libgit2-devel libudev-devel libusbx-devel libcurl-devel libssh2-devel\
+	libudev-devel libusbx-devel libcurl-devel libssh2-devel\
 	qt5-qtbase-devel qt5-qtdeclarative-devel qt5-qtscript-devel \
 	qt5-qtwebkit-devel qt5-qtsvg-devel qt5-qttools-devel \
-	qt5-qtconnectivity-devel
+	qt5-qtconnectivity-devel qt5-qtlocation-devel
 
 Note that beginning with Fedora 22, you should be using the dnf command instead
 as yum is being deprecated.
@@ -86,21 +83,35 @@ as yum is being deprecated.
 Package names are sadly different on OpenSUSE
 
 sudo zypper install git gcc-c++ make autoconf automake libtool cmake libzip-devel \
-	libxml2-devel libxslt-devel sqlite3-devel libgit2-devel libusb-1_0-devel \
+	libxml2-devel libxslt-devel sqlite3-devel libusb-1_0-devel \
 	libqt5-linguist-devel libqt5-qttools-devel libQt5WebKitWidgets-devel \
 	libqt5-qtbase-devel libQt5WebKit5-devel libqt5-qtsvg-devel \
 	libqt5-qtscript-devel libqt5-qtdeclarative-devel \
-	libqt5-qtconnectivity-devel
+	libqt5-qtconnectivity-devel libqt5-qtlocation-devel libcurl-devel
 
-On Debian Jessie and recent Ubuntu flavors this seems to work
+On Debian Stretch this seems to work
 
-sudo apt-get install git g++ make autoconf libtool cmake pkg-config \
+sudo apt-get install git g++ make autoconf automake libtool cmake pkg-config \
 	libxml2-dev libxslt1-dev libzip-dev libsqlite3-dev \
-	libusb-1.0-0-dev libgit2-dev \
+	libusb-1.0-0-dev libssl-dev \
 	qt5-default qt5-qmake qtchooser qttools5-dev-tools libqt5svg5-dev \
 	libqt5webkit5-dev libqt5qml5 libqt5quick5 libqt5declarative5 \
 	qtscript5-dev libssh2-1-dev libcurl4-openssl-dev qttools5-dev \
-	qtconnectivity5-dev
+	qtconnectivity5-dev qtlocation5-dev qtpositioning5-dev \
+	libcrypto++-dev libssl-dev qml-module-qtpositioning qml-module-qtlocation \
+	qml-module-qtquick2
+
+Package names for Ubuntu 16.10
+
+sudo apt-get install git g++ make autoconf automake libtool cmake pkg-config \
+	libxml2-dev libxslt1-dev libzip-dev libsqlite3-dev \
+	libusb-1.0-0-dev libssl-dev \
+	qt5-default qt5-qmake qtchooser qttools5-dev-tools libqt5svg5-dev \
+	libqt5webkit5-dev libqt5qml5 libqt5quick5 qtdeclarative5-dev \
+	qtscript5-dev libssh2-1-dev libcurl4-openssl-dev qttools5-dev \
+	qtconnectivity5-dev qtlocation5-dev qtpositioning5-dev \
+	libcrypto++-dev libssl-dev qml-module-qtpositioning qml-module-qtlocation \
+	qml-module-qtquick2
 
 On PCLinuxOS you appear to need the following packages
 
@@ -117,7 +128,7 @@ like this:
 
 mkdir -p ~/src
 cd ~/src
-git clone git://subsurface-divelog.org/subsurface
+git clone https://github.com/Subsurface-divelog/subsurface.git
 ./subsurface/scripts/build.sh # <- this step will take quite a while as it
                               #    compiles a handful of libraries before
 			      #    building Subsurface
@@ -161,13 +172,9 @@ $ ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/maste
 
 2) Install needed dependencies
 
-$ brew install asciidoc libzip sqlite cmake libusb pkg-config automake libtool hidapi
+$ brew install asciidoc libzip cmake libusb pkg-config automake libtool hidapi curl libssh2
 
-3) Make the brew version of sqlite the default
-
-$ brew link --force sqlite
-
-4) Download and install Qt
+3) Download and install Qt
 
 You can build Qt from source or use the prebuilt binaries for Mac. Start
 by downloading the online installer:
@@ -187,7 +194,7 @@ as well as QtWebEngine, Qt3D, Qt Canvas 3D and the Qt Extras.
 
 If you want to build from source (which takes a very long time and a lot of disk)
 
-$ cd ~/Qt/5.5/Src/
+$ cd ~/Qt/5.9.2/Src/
 
 $ ./configure -prefix /usr/local -opensource
 

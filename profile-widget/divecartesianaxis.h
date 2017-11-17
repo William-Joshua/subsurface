@@ -1,9 +1,10 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVECARTESIANAXIS_H
 #define DIVECARTESIANAXIS_H
 
 #include <QObject>
 #include <QGraphicsLineItem>
-#include "subsurface-core/color.h"
+#include "core/color.h"
 #include "profilewidget2.h"
 
 class QPropertyAnimation;
@@ -95,7 +96,7 @@ class TimeAxis : public DiveCartesianAxis {
 	Q_OBJECT
 public:
 	TimeAxis(ProfileWidget2 *widget);
-	virtual void updateTicks();
+	void updateTicks(color_indice_t color = TIME_GRID);
 
 protected:
 	QString textForValue(double value);

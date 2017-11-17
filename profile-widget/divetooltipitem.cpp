@@ -1,18 +1,15 @@
-#include "divetooltipitem.h"
-#include "divecartesianaxis.h"
-#include "dive.h"
-#include "profile.h"
-#include "membuffer.h"
-#include "metrics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "profile-widget/divetooltipitem.h"
+#include "profile-widget/divecartesianaxis.h"
+#include "core/dive.h"
+#include "core/profile.h"
+#include "core/membuffer.h"
+#include "core/metrics.h"
 #include <QPropertyAnimation>
 #include <QSettings>
 #include <QGraphicsView>
 #include <QStyleOptionGraphicsItem>
-
-#define PORT_IN_PROGRESS 1
-#ifdef PORT_IN_PROGRESS
-#include "display.h"
-#endif
+#include "core/qthelper.h"
 
 void ToolTipItem::addToolTip(const QString &toolTip, const QIcon &icon, const QPixmap& pixmap)
 {
@@ -32,10 +29,11 @@ void ToolTipItem::addToolTip(const QString &toolTip, const QIcon &icon, const QP
 	} else if (!pixmap.isNull()) {
 		iconItem->setPixmap(pixmap);
 	}
-	iconItem->setPos(iconMetrics.spacing, yValue);
+	const int sp2 = iconMetrics.spacing * 2;
+	iconItem->setPos(sp2, yValue);
 
 	QGraphicsSimpleTextItem *textItem = new QGraphicsSimpleTextItem(toolTip, this);
-	textItem->setPos(iconMetrics.spacing + iconMetrics.sz_small + iconMetrics.spacing, yValue);
+	textItem->setPos(sp2 + iconMetrics.sz_small + sp2, yValue);
 	textItem->setBrush(QBrush(Qt::white));
 	textItem->setFlag(ItemIgnoresTransformations);
 	toolTips.push_back(qMakePair(iconItem, textItem));
@@ -100,14 +98,23 @@ void ToolTipItem::expand()
 		height += sRect.height();
 	}
 
-	/*       Left padding, Icon Size,   space, right padding */
-	width += iconMetrics.spacing + iconMetrics.sz_small + iconMetrics.spacing + iconMetrics.spacing;
+	const int sp2 = iconMetrics.spacing * 2;
+	// pixmap left padding, icon, pixmap right padding, right padding */
+	width += sp2 + iconMetrics.sz_small + sp2 + sp2 * 2;
+	// bottom padding
+	height += sp2;
 
-	if (width < title->boundingRect().width() + iconMetrics.spacing * 2)
-		width = title->boundingRect().width() + iconMetrics.spacing * 2;
-
-	if (height < iconMetrics.sz_small)
+	// clip the tooltip width
+	if (width < title->boundingRect().width() + sp2)
+		width = title->boundingRect().width() + sp2;
+	// clip the height
+	if (entryToolTip.first) {
+		const int minH = lrint(entryToolTip.first->y() + entryToolTip.first->pixmap().height() + sp2);
+		if (height < minH)
+			height = minH;
+	} else if (height < iconMetrics.sz_small) {
 		height = iconMetrics.sz_small;
+	}
 
 	nextRectangle.setWidth(width);
 	nextRectangle.setHeight(height);
@@ -195,7 +202,7 @@ void ToolTipItem::paint(QPainter *painter, const QStyleOptionGraphicsItem *optio
 	painter->setClipRect(option->rect);
 	painter->setPen(pen());
 	painter->setBrush(brush());
-	painter->drawRoundedRect(rect(), 10, 10, Qt::AbsoluteSize);
+	painter->drawRoundedRect(rect(), 8, 8, Qt::AbsoluteSize);
 	painter->restore();
 }
 
@@ -233,13 +240,13 @@ void ToolTipItem::refresh(const QPointF &pos)
 	struct plot_data *entry;
 	static QPixmap tissues(16,60);
 	static QPainter painter(&tissues);
-	static struct membuffer mb = { 0 };
+	static struct membuffer mb = {};
 
 	if(refreshTime.elapsed() < 40)
 		return;
 	refreshTime.start();
 
-	int time = timeAxis->valueAt(pos);
+	int time = lrint(timeAxis->valueAt(pos));
 	if (time == lastTime)
 		return;
 
@@ -248,26 +255,31 @@ void ToolTipItem::refresh(const QPointF &pos)
 
 	mb.len = 0;
 	entry = get_plot_details_new(&pInfo, time, &mb);
+
+	tissues.fill();
+	painter.setPen(QColor(0, 0, 0, 0));
+	painter.setBrush(QColor(LIMENADE1));
+	painter.drawRect(0, 10 + (100 - AMB_PERCENTAGE) / 2, 16, AMB_PERCENTAGE / 2);
+	painter.setBrush(QColor(SPRINGWOOD1));
+	painter.drawRect(0, 10, 16, (100 - AMB_PERCENTAGE) / 2);
+	painter.setBrush(QColor(Qt::red));
+	painter.drawRect(0,0,16,10);
 	if (entry) {
-		tissues.fill();
-		painter.setPen(QColor(0, 0, 0, 0));
-		painter.setBrush(QColor(LIMENADE1));
-		painter.drawRect(0, 10 + (100 - AMB_PERCENTAGE) / 2, 16, AMB_PERCENTAGE / 2);
-		painter.setBrush(QColor(SPRINGWOOD1));
-		painter.drawRect(0, 10, 16, (100 - AMB_PERCENTAGE) / 2);
-		painter.setBrush(QColor(Qt::red));
-		painter.drawRect(0,0,16,10);
+		ProfileWidget2 *view = qobject_cast<ProfileWidget2*>(scene()->views().first());
+		Q_ASSERT(view);
+
 		painter.setPen(QColor(0, 0, 0, 255));
-		painter.drawLine(0, 60 - entry->gfline / 2, 16, 60 - entry->gfline / 2);
-		painter.drawLine(0, 60 - AMB_PERCENTAGE * (entry->pressures.n2 + entry->pressures.he) / entry->ambpressure / 2,
-				16, 60 - AMB_PERCENTAGE * (entry->pressures.n2 + entry->pressures.he) / entry->ambpressure /2);
+		if (decoMode() == BUEHLMANN)
+			painter.drawLine(0, lrint(60 - entry->gfline / 2), 16, lrint(60 - entry->gfline / 2));
+		painter.drawLine(0, lrint(60 - AMB_PERCENTAGE * (entry->pressures.n2 + entry->pressures.he) / entry->ambpressure / 2),
+				16, lrint(60 - AMB_PERCENTAGE * (entry->pressures.n2 + entry->pressures.he) / entry->ambpressure /2));
 		painter.setPen(QColor(0, 0, 0, 127));
 		for (int i=0; i<16; i++) {
 			painter.drawLine(i, 60, i, 60 - entry->percentages[i] / 2);
 		}
-		entryToolTip.first->setPixmap(tissues);
 		entryToolTip.second->setText(QString::fromUtf8(mb.buffer, mb.len));
 	}
+	entryToolTip.first->setPixmap(tissues);
 
 	Q_FOREACH (QGraphicsItem *item, scene()->items(pos, Qt::IntersectsItemBoundingRect
 		,Qt::DescendingOrder, scene()->views().first()->transform())) {

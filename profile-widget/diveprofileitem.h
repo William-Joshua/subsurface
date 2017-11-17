@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVEPROFILEITEM_H
 #define DIVEPROFILEITEM_H
 
@@ -49,6 +50,7 @@ slots:
 	virtual void settingsChanged();
 	virtual void modelDataChanged(const QModelIndex &topLeft = QModelIndex(), const QModelIndex &bottomRight = QModelIndex());
 	virtual void modelDataRemoved(const QModelIndex &parent, int from, int to);
+	void setVisible(bool visible);
 
 protected:
 	/* when the model emits a 'datachanged' signal, this method below should be used to check if the
@@ -75,6 +77,7 @@ public:
 	DiveProfileItem();
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = 0);
 	virtual void modelDataChanged(const QModelIndex &topLeft = QModelIndex(), const QModelIndex &bottomRight = QModelIndex());
+	void settingsToggled(bool toggled);
 	virtual void settingsChanged();
 	void plot_depth_sample(struct plot_data *entry, QFlags<Qt::AlignmentFlag> flags, const QColor &color);
 	int maxCeiling(int row);
@@ -91,7 +94,6 @@ public:
 	DiveMeanDepthItem();
 	virtual void modelDataChanged(const QModelIndex &topLeft = QModelIndex(), const QModelIndex &bottomRight = QModelIndex());
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = 0);
-	virtual void settingsChanged();
 
 private:
 	void createTextItem();
@@ -116,7 +118,6 @@ public:
 	DiveHeartrateItem();
 	virtual void modelDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-	virtual void settingsChanged();
 
 private:
 	void createTextItem(int seconds, int hr);
@@ -129,10 +130,12 @@ public:
 	DivePercentageItem(int i);
 	virtual void modelDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-	virtual void settingsChanged();
 
 private:
 	QString visibilityKey;
+	int tissueIndex;
+	QColor ColorScale(double value, int inert);
+
 };
 
 class DiveAmbPressureItem : public AbstractProfilePolygonItem {
@@ -141,7 +144,6 @@ public:
 	DiveAmbPressureItem();
 	virtual void modelDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-	virtual void settingsChanged();
 
 private:
 	QString visibilityKey;
@@ -153,7 +155,6 @@ public:
 	DiveGFLineItem();
 	virtual void modelDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight);
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget);
-	virtual void settingsChanged();
 
 private:
 	QString visibilityKey;
@@ -196,15 +197,16 @@ class DiveReportedCeiling : public AbstractProfilePolygonItem {
 	Q_OBJECT
 
 public:
+	DiveReportedCeiling();
 	virtual void modelDataChanged(const QModelIndex &topLeft = QModelIndex(), const QModelIndex &bottomRight = QModelIndex());
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = 0);
-	virtual void settingsChanged();
 };
 
 class DiveCalculatedTissue : public DiveCalculatedCeiling {
 	Q_OBJECT
 public:
 	DiveCalculatedTissue(ProfileWidget2 *profileWidget);
+	void setVisible(bool visible);
 	virtual void settingsChanged();
 };
 
@@ -214,14 +216,14 @@ public:
 	PartialPressureGasItem();
 	virtual void paint(QPainter *painter, const QStyleOptionGraphicsItem *option, QWidget *widget = 0);
 	virtual void modelDataChanged(const QModelIndex &topLeft = QModelIndex(), const QModelIndex &bottomRight = QModelIndex());
-	virtual void settingsChanged();
-	void setThreshouldSettingsKey(double *prefPointer);
+	void setThreshouldSettingsKey(double *prefPointerMin, double *prefPointerMax);
 	void setVisibilitySettingsKey(const QString &setVisibilitySettingsKey);
 	void setColors(const QColor &normalColor, const QColor &alertColor);
 
 private:
 	QVector<QPolygonF> alertPolygons;
-	double *thresholdPtr;
+	double *thresholdPtrMin;
+	double *thresholdPtrMax;
 	QString visibilityKey;
 	QColor normalColor;
 	QColor alertColor;

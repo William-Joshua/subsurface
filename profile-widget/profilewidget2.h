@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef PROFILEWIDGET2_H
 #define PROFILEWIDGET2_H
 
@@ -13,15 +14,14 @@
 //  *
 //  * It needs to be dynamic, things should *flow* on it, not just appear / disappear.
 //  */
-#include "divelineitem.h"
-#include "diveprofileitem.h"
-#include "display.h"
+#include "profile-widget/divelineitem.h"
+#include "profile-widget/diveprofileitem.h"
+#include "core/display.h"
 
 class RulerItem2;
 struct dive;
 struct plot_info;
 class ToolTipItem;
-class DiveMeanDepth;
 class DiveReportedCeiling;
 class DiveTextItem;
 class TemperatureAxis;
@@ -35,7 +35,6 @@ class DiveProfileItem;
 class TimeAxis;
 class DiveTemperatureItem;
 class DiveHeartrateItem;
-class PercentageItem;
 class DiveGasPressureItem;
 class DiveCalculatedCeiling;
 class DiveCalculatedTissue;
@@ -72,7 +71,6 @@ public:
 	ProfileWidget2(QWidget *parent = 0);
 	void resetZoom();
 	void plotDive(struct dive *d = 0, bool force = false);
-	virtual bool eventFilter(QObject *, QEvent *);
 	void setupItem(AbstractProfilePolygonItem *item, DiveCartesianAxis *hAxis, DiveCartesianAxis *vAxis, DivePlotDataModel *model, int vData, int hData, int zValue);
 	void setPrintMode(bool mode, bool grayscale = false);
 	bool getPrintMode();
@@ -82,6 +80,7 @@ public:
 	double getFontPrintScale();
 	void setFontPrintScale(double scale);
 #ifndef SUBSURFACE_MOBILE
+	virtual bool eventFilter(QObject *, QEvent *) override;
 	void clearHandlers();
 #endif
 	void recalcCeiling();
@@ -91,7 +90,6 @@ public:
 signals:
 	void fontPrintScaleChanged(double scale);
 	void enableToolbar(bool enable);
-	void showError();
 	void enableShortcuts();
 	void disableShortcuts(bool paste);
 	void refreshDisplay(bool recreateDivelist);
@@ -103,14 +101,15 @@ public
 slots: // Necessary to call from QAction's signals.
 	void dateTimeChanged();
 	void settingsChanged();
+	void actionRequestedReplot(bool triggered);
 	void setEmptyState();
 	void setProfileState();
-	void setPlanState();
-	void setAddState();
 	void plotPictures();
 	void setReplot(bool state);
 	void replot(dive *d = 0);
 #ifndef SUBSURFACE_MOBILE
+	void setPlanState();
+	void setAddState();
 	void changeGas();
 	void addSetpointChange();
 	void addBookmark();
@@ -140,15 +139,19 @@ slots: // Necessary to call from QAction's signals.
 
 protected:
 	virtual ~ProfileWidget2();
-	virtual void resizeEvent(QResizeEvent *event);
-	virtual void wheelEvent(QWheelEvent *event);
-	virtual void mouseMoveEvent(QMouseEvent *event);
+	void resizeEvent(QResizeEvent *event) Q_DECL_OVERRIDE;
 #ifndef SUBSURFACE_MOBILE
-	virtual void contextMenuEvent(QContextMenuEvent *event);
+	void wheelEvent(QWheelEvent *event) Q_DECL_OVERRIDE;
+	void mouseMoveEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+	void contextMenuEvent(QContextMenuEvent *event) Q_DECL_OVERRIDE;
+	void mouseDoubleClickEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+	void mousePressEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
+	void mouseReleaseEvent(QMouseEvent *event) Q_DECL_OVERRIDE;
 #endif
-	virtual void mouseDoubleClickEvent(QMouseEvent *event);
-	virtual void mousePressEvent(QMouseEvent *event);
-	virtual void mouseReleaseEvent(QMouseEvent *event);
+	void dropEvent(QDropEvent *event) Q_DECL_OVERRIDE;
+	void dragEnterEvent(QDragEnterEvent *event) Q_DECL_OVERRIDE;
+	void dragMoveEvent(QDragMoveEvent *event) Q_DECL_OVERRIDE;
+
 
 private: /*methods*/
 	void fixBackgroundPos();
@@ -166,7 +169,9 @@ private:
 	qreal zoomFactor;
 	DivePixmapItem *background;
 	QString backgroundFile;
+#ifndef SUBSURFACE_MOBILE
 	ToolTipItem *toolTipItem;
+#endif
 	bool isPlotZoomed;
 	bool replotEnabled;
 	// All those here should probably be merged into one structure,
@@ -184,9 +189,6 @@ private:
 	DiveGasPressureItem *gasPressureItem;
 	QList<DiveEventItem *> eventItems;
 	DiveTextItem *diveComputerText;
-	DiveCalculatedCeiling *diveCeiling;
-	DiveTextItem *decoModelParameters;
-	QList<DiveCalculatedTissue *> allTissues;
 	DiveReportedCeiling *reportedCeiling;
 	PartialPressureGasItem *pn2GasItem;
 	PartialPressureGasItem *pheGasItem;
@@ -195,6 +197,10 @@ private:
 	PartialPressureGasItem *ccrsensor1GasItem;
 	PartialPressureGasItem *ccrsensor2GasItem;
 	PartialPressureGasItem *ccrsensor3GasItem;
+#ifndef SUBSURFACE_MOBILE
+	DiveCalculatedCeiling *diveCeiling;
+	DiveTextItem *decoModelParameters;
+	QList<DiveCalculatedTissue *> allTissues;
 	DiveCartesianAxis *heartBeatAxis;
 	DiveHeartrateItem *heartBeatItem;
 	DiveCartesianAxis *percentageAxis;
@@ -204,6 +210,7 @@ private:
 	DiveLineItem *mouseFollowerVertical;
 	DiveLineItem *mouseFollowerHorizontal;
 	RulerItem2 *rulerItem;
+#endif
 	TankItem *tankItem;
 	bool isGrayscale;
 	bool printMode;

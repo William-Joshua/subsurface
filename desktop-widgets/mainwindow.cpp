@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * mainwindow.cpp
  *
@@ -11,67 +12,98 @@
 #include <QSettings>
 #include <QShortcut>
 #include <QToolBar>
+#include <QStatusBar>
 
-#include "version.h"
-#include "divelistview.h"
-#include "downloadfromdivecomputer.h"
-#include "subsurfacewebservices.h"
-#include "divecomputermanagementdialog.h"
-#include "about.h"
-#include "updatemanager.h"
-#include "planner.h"
-#include "filtermodels.h"
+#include "core/version.h"
+#include "desktop-widgets/divelistview.h"
+#include "desktop-widgets/downloadfromdivecomputer.h"
+#include "desktop-widgets/subsurfacewebservices.h"
+#include "desktop-widgets/divecomputermanagementdialog.h"
+#include "desktop-widgets/about.h"
+#include "desktop-widgets/updatemanager.h"
+#include "core/planner.h"
+#include "qt-models/filtermodels.h"
 #include "profile-widget/profilewidget2.h"
-#include "globe.h"
-#include "divecomputer.h"
-#include "maintab.h"
-#include "diveplanner.h"
+#include "core/divecomputer.h"
+#include "desktop-widgets/tab-widgets/maintab.h"
+#include "desktop-widgets/diveplanner.h"
 #ifndef NO_PRINTING
 #include <QPrintDialog>
-#include "printdialog.h"
+#include <QBuffer>
+#include "desktop-widgets/printdialog.h"
 #endif
-#include "tankinfomodel.h"
-#include "weigthsysteminfomodel.h"
-#include "yearlystatisticsmodel.h"
-#include "diveplannermodel.h"
-#include "divelogimportdialog.h"
-#include "divelogexportdialog.h"
-#include "usersurvey.h"
-#include "divesitehelpers.h"
-#include "windowtitleupdate.h"
-#include "locationinformation.h"
+#include "qt-models/tankinfomodel.h"
+#include "qt-models/weigthsysteminfomodel.h"
+#include "qt-models/yearlystatisticsmodel.h"
+#include "qt-models/diveplannermodel.h"
+#include "desktop-widgets/divelogimportdialog.h"
+#include "desktop-widgets/divelogexportdialog.h"
+#include "desktop-widgets/usersurvey.h"
+#include "core/divesitehelpers.h"
+#include "core/windowtitleupdate.h"
+#include "desktop-widgets/locationinformation.h"
 #include "preferences/preferencesdialog.h"
 
 #ifndef NO_USERMANUAL
 #include "usermanual.h"
 #endif
-#include "divepicturemodel.h"
-#include "git-access.h"
+#include "qt-models/divepicturemodel.h"
+#include "core/git-access.h"
 #include <QNetworkProxy>
 #include <QUndoStack>
-#include <qthelper.h>
+#include "core/qthelper.h"
 #include <QtConcurrentRun>
-#include "subsurface-core/color.h"
-#include "subsurface-core/isocialnetworkintegration.h"
-#include "subsurface-core/pluginmanager.h"
-
-#include "plugins/facebook/facebook_integration.h"
+#include "core/color.h"
+#include "core/isocialnetworkintegration.h"
+#include "core/pluginmanager.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 
 #if defined(FBSUPPORT)
-#include "socialnetworks.h"
+#include "plugins/facebook/facebook_integration.h"
+#include "plugins/facebook/facebookconnectwidget.h"
 #endif
+
+#include "desktop-widgets/mapwidget.h"
 
 QProgressDialog *progressDialog = NULL;
 bool progressDialogCanceled = false;
 
-extern "C" int updateProgress(int percent)
+static int progressCounter = 0;
+
+extern "C" int updateProgress(const char *text)
 {
-	if (progressDialog)
-		progressDialog->setValue(percent);
+	if (verbose)
+		qDebug() << "git storage:" << text;
+	if (progressDialog) {
+		progressDialog->setLabelText(text);
+		progressDialog->setValue(++progressCounter);
+		if (progressCounter == 100)
+			progressCounter = 0; // yes this is silly, but we really don't know how long it will take
+	}
+	qApp->processEvents();
 	return progressDialogCanceled;
 }
 
 MainWindow *MainWindow::m_Instance = NULL;
+
+extern "C" void showErrorFromC()
+{
+	// Show errors only if we are running in the GUI thread.
+	// If we're not in the GUI thread, let errors accumulate.
+	if (QThread::currentThread() != QCoreApplication::instance()->thread())
+		return;
+
+	MainWindow *mainwindow = MainWindow::instance();
+	if (mainwindow)
+		mainwindow->showErrors();
+}
+
+void MainWindow::showErrors()
+{
+	const char *error = get_error_string();
+	if (error && error[0])
+		getNotificationWidget()->showNotification(error, KMessageWidget::Error);
+}
 
 MainWindow::MainWindow() : QMainWindow(),
 	actionNextDive(0),
@@ -91,12 +123,7 @@ MainWindow::MainWindow() : QMainWindow(),
 	MainTab *mainTab = new MainTab();
 	DiveListView *diveListView = new DiveListView();
 	ProfileWidget2 *profileWidget = new ProfileWidget2();
-
-#ifndef NO_MARBLE
-	GlobeGPS *globeGps = GlobeGPS::instance();
-#else
-	QWidget *globeGps = NULL;
-#endif
+	MapWidget *mapWidget = MapWidget::instance();
 
 	PlannerSettingsWidget *plannerSettings = new PlannerSettingsWidget();
 	DivePlannerWidget *plannerWidget = new DivePlannerWidget();
@@ -146,12 +173,12 @@ MainWindow::MainWindow() : QMainWindow(),
 	enabledList.push_back(enabled);
 	disabledList.push_back(disabled);
 
-	registerApplicationState("Default", mainTab, profileContainer, diveListView, globeGps );
-	registerApplicationState("AddDive", mainTab, profileContainer, diveListView, globeGps );
-	registerApplicationState("EditDive", mainTab, profileContainer, diveListView, globeGps );
+	registerApplicationState("Default", mainTab, profileContainer, diveListView, mapWidget );
+	registerApplicationState("AddDive", mainTab, profileContainer, diveListView, mapWidget );
+	registerApplicationState("EditDive", mainTab, profileContainer, diveListView, mapWidget );
 	registerApplicationState("PlanDive", plannerWidget, profileContainer, plannerSettings, plannerDetails );
-	registerApplicationState("EditPlannedDive", plannerWidget, profileContainer, diveListView, globeGps );
-	registerApplicationState("EditDiveSite", diveSiteEdit, profileContainer, diveListView, globeGps);
+	registerApplicationState("EditPlannedDive", plannerWidget, profileContainer, diveListView, mapWidget );
+	registerApplicationState("EditDiveSite", diveSiteEdit, profileContainer, diveListView, mapWidget);
 
 	setStateProperties("Default", enabledList, enabledList, enabledList,enabledList);
 	setStateProperties("AddDive", enabledList, enabledList, enabledList,enabledList);
@@ -186,23 +213,15 @@ MainWindow::MainWindow() : QMainWindow(),
 	connect(DivePlannerPointsModel::instance(), SIGNAL(planCanceled()), this, SLOT(planCanceled()));
 	connect(plannerDetails->printPlan(), SIGNAL(pressed()), divePlannerWidget(), SLOT(printDecoPlan()));
 	connect(this, SIGNAL(startDiveSiteEdit()), this, SLOT(on_actionDiveSiteEdit_triggered()));
+	connect(information(), SIGNAL(diveSiteChanged(struct dive_site *)), mapWidget, SLOT(centerOnDiveSite(struct dive_site *)));
 
-#ifndef NO_MARBLE
-	connect(information(), SIGNAL(diveSiteChanged(struct dive_site *)), globeGps, SLOT(centerOnDiveSite(struct dive_site *)));
-#endif
 	wtu = new WindowTitleUpdate();
 	connect(WindowTitleUpdate::instance(), SIGNAL(updateTitle()), this, SLOT(setAutomaticTitle()));
 #ifdef NO_PRINTING
 	plannerDetails->printPlan()->hide();
 	ui.menuFile->removeAction(ui.actionPrint);
 #endif
-#ifndef USE_LIBGIT23_API
-	ui.menuFile->removeAction(ui.actionCloudstorageopen);
-	ui.menuFile->removeAction(ui.actionCloudstoragesave);
-	qDebug() << "disabled / made invisible the cloud storage stuff";
-#else
 	enableDisableCloudActions();
-#endif
 
 	ui.mainErrorMessage->hide();
 	graphics()->setEmptyState();
@@ -211,14 +230,11 @@ MainWindow::MainWindow() : QMainWindow(),
 	diveListView->reload(DiveTripModel::TREE);
 	diveListView->reloadHeaderActions();
 	diveListView->setFocus();
-	GlobeGPS::instance()->reload();
+	MapWidget::instance()->reload();
 	diveListView->expand(dive_list()->model()->index(0, 0));
 	diveListView->scrollTo(dive_list()->model()->index(0, 0), QAbstractItemView::PositionAtCenter);
 	divePlannerWidget()->settingsChanged();
 	divePlannerSettingsWidget()->settingsChanged();
-#ifdef NO_MARBLE
-	ui.menuView->removeAction(ui.actionViewGlobe);
-#endif
 #ifdef NO_USERMANUAL
 	ui.menuHelp->removeAction(ui.actionUserManual);
 #endif
@@ -247,6 +263,83 @@ MainWindow::MainWindow() : QMainWindow(),
 
 	setupSocialNetworkMenu();
 	set_git_update_cb(&updateProgress);
+	set_error_cb(&showErrorFromC);
+
+	// Toolbar Connections related to the Profile Update
+	SettingsObjectWrapper *sWrapper = SettingsObjectWrapper::instance();
+	connect(ui.profCalcAllTissues, &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setCalcalltissues);
+	connect(ui.profCalcCeiling,    &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setCalcceiling);
+	connect(ui.profDcCeiling,      &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setDCceiling);
+	connect(ui.profEad,            &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setEad);
+	connect(ui.profIncrement3m,    &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setCalcceiling3m);
+	connect(ui.profMod,            &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setMod);
+	connect(ui.profNdl_tts,        &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setCalcndltts);
+	connect(ui.profHR,             &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setHRgraph);
+	connect(ui.profRuler,          &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setRulerGraph);
+	connect(ui.profSAC,            &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setShowSac);
+	connect(ui.profScaled,         &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setZoomedPlot);
+	connect(ui.profTogglePicture,  &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setShowPicturesInProfile);
+	connect(ui.profTankbar,        &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setTankBar);
+	connect(ui.profTissues,        &QAction::triggered, sWrapper->techDetails, &TechnicalDetailsSettings::setPercentageGraph);
+
+	connect(ui.profPhe, &QAction::triggered, sWrapper->pp_gas, &PartialPressureGasSettings::setShowPhe);
+	connect(ui.profPn2, &QAction::triggered, sWrapper->pp_gas, &PartialPressureGasSettings::setShowPn2);
+	connect(ui.profPO2, &QAction::triggered, sWrapper->pp_gas, &PartialPressureGasSettings::setShowPo2);
+
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::calcalltissuesChanged        , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::calcceilingChanged           , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::dcceilingChanged             , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::eadChanged                   , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::calcceiling3mChanged         , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::modChanged                   , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::calcndlttsChanged            , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::hrgraphChanged               , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::rulerGraphChanged            , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::showSacChanged               , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::zoomedPlotChanged            , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::showPicturesInProfileChanged , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::tankBarChanged               , graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->techDetails, &TechnicalDetailsSettings::percentageGraphChanged       , graphics(), &ProfileWidget2::actionRequestedReplot);
+
+	connect(sWrapper->pp_gas, &PartialPressureGasSettings::showPheChanged, graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->pp_gas, &PartialPressureGasSettings::showPn2Changed, graphics(), &ProfileWidget2::actionRequestedReplot);
+	connect(sWrapper->pp_gas, &PartialPressureGasSettings::showPo2Changed, graphics(), &ProfileWidget2::actionRequestedReplot);
+
+	// now let's set up some connections
+	connect(graphics(), &ProfileWidget2::enableToolbar ,this, &MainWindow::setEnabledToolbar);
+	connect(graphics(), &ProfileWidget2::disableShortcuts, this, &MainWindow::disableShortcuts);
+	connect(graphics(), &ProfileWidget2::enableShortcuts, this, &MainWindow::enableShortcuts);
+	connect(graphics(), &ProfileWidget2::refreshDisplay, this, &MainWindow::refreshDisplay);
+	connect(graphics(), &ProfileWidget2::editCurrentDive, this, &MainWindow::editCurrentDive);
+	connect(graphics(), &ProfileWidget2::updateDiveInfo, information(), &MainTab::updateDiveInfo);
+
+	connect(PreferencesDialog::instance(), SIGNAL(settingsChanged()), graphics(), SLOT(settingsChanged()));
+
+	ui.profCalcAllTissues->setChecked(sWrapper->techDetails->calcalltissues());
+	ui.profCalcCeiling->setChecked(sWrapper->techDetails->calcceiling());
+	ui.profDcCeiling->setChecked(sWrapper->techDetails->dcceiling());
+	ui.profEad->setChecked(sWrapper->techDetails->ead());
+	ui.profIncrement3m->setChecked(sWrapper->techDetails->calcceiling3m());
+	ui.profMod->setChecked(sWrapper->techDetails->mod());
+	ui.profNdl_tts->setChecked(sWrapper->techDetails->calcndltts());
+	ui.profPhe->setChecked(sWrapper->pp_gas->showPhe());
+	ui.profPn2->setChecked(sWrapper->pp_gas->showPn2());
+	ui.profPO2->setChecked(sWrapper->pp_gas->showPo2());
+	ui.profHR->setChecked(sWrapper->techDetails->hrgraph());
+	ui.profRuler->setChecked(sWrapper->techDetails->rulerGraph());
+	ui.profSAC->setChecked(sWrapper->techDetails->showSac());
+	ui.profTogglePicture->setChecked(sWrapper->techDetails->showPicturesInProfile());
+	ui.profTankbar->setChecked(sWrapper->techDetails->tankBar());
+	ui.profTissues->setChecked(sWrapper->techDetails->percentageGraph());
+	ui.profScaled->setChecked(sWrapper->techDetails->zoomedPlot());
+
+// full screen support is buggy on Windows and Ubuntu.
+// require the FULLSCREEN_SUPPORT macro to enable it!
+#ifndef FULLSCREEN_SUPPORT
+	ui.actionFullScreen->setEnabled(false);
+	ui.actionFullScreen->setVisible(false);
+	setWindowState(windowState() & ~Qt::WindowFullScreen);
+#endif
 }
 
 MainWindow::~MainWindow()
@@ -257,7 +350,8 @@ MainWindow::~MainWindow()
 
 void MainWindow::setupSocialNetworkMenu()
 {
-	QMenu *connections = new QMenu(tr("Connect to"));
+#ifdef FBSUPPORT
+	connections = new QMenu(tr("Connect to"));
 	FacebookPlugin *facebookPlugin = new FacebookPlugin();
 	QAction *toggle_connection = new QAction(this);
 	QObject *obj = qobject_cast<QObject*>(facebookPlugin);
@@ -265,21 +359,41 @@ void MainWindow::setupSocialNetworkMenu()
 	toggle_connection->setIcon(QIcon(facebookPlugin->socialNetworkIcon()));
 	toggle_connection->setData(QVariant::fromValue(obj));
 	connect(toggle_connection, SIGNAL(triggered()), this, SLOT(socialNetworkRequestConnect()));
-
-	QAction *share_on = new QAction(this);
-	share_on->setText(facebookPlugin->socialNetworkName());
-	share_on->setIcon(QIcon(facebookPlugin->socialNetworkIcon()));
-	share_on->setData(QVariant::fromValue(obj));
-	ui.menuShare_on->addAction(share_on);
+	FacebookManager *fb = FacebookManager::instance();
+	connect(fb, &FacebookManager::justLoggedIn, this, &MainWindow::facebookLoggedIn);
+	connect(fb, &FacebookManager::justLoggedOut, this, &MainWindow::facebookLoggedOut);
+	connect(fb, &FacebookManager::sendMessage, [this](const QString& msg) {
+		statusBar()->showMessage(msg, 10000); // show message for 10 secs on the statusbar.
+	});
+	share_on_fb = new QAction(this);
+	share_on_fb->setText(facebookPlugin->socialNetworkName());
+	share_on_fb->setIcon(QIcon(facebookPlugin->socialNetworkIcon()));
+	share_on_fb->setData(QVariant::fromValue(obj));
+	share_on_fb->setEnabled(false);
+	ui.menuShare_on->addAction(share_on_fb);
 	connections->addAction(toggle_connection);
-	connect(share_on, SIGNAL(triggered()), this, SLOT(socialNetworkRequestUpload()));
+	connect(share_on_fb, SIGNAL(triggered()), this, SLOT(socialNetworkRequestUpload()));
 	ui.menuShare_on->addSeparator();
 	ui.menuShare_on->addMenu(connections);
 	ui.menubar->show();
+#endif
+}
+
+void MainWindow::facebookLoggedIn()
+{
+	connections->setTitle(tr("Disconnect from"));
+	share_on_fb->setEnabled(true);
+}
+
+void MainWindow::facebookLoggedOut()
+{
+	connections->setTitle(tr("Connect to"));
+	share_on_fb->setEnabled(false);
 }
 
 void MainWindow::socialNetworkRequestConnect()
 {
+	qDebug() << "Requesting connect on the social network";
 	QAction *action = qobject_cast<QAction*>(sender());
 	ISocialNetworkIntegration *plugin = qobject_cast<ISocialNetworkIntegration*>(action->data().value<QObject*>());
 	if (plugin->isConnected())
@@ -306,10 +420,9 @@ void MainWindow::on_actionDiveSiteEdit_triggered() {
 
 void MainWindow::enableDisableCloudActions()
 {
-#ifdef USE_LIBGIT23_API
 	ui.actionCloudstorageopen->setEnabled(prefs.cloud_verification_status == CS_VERIFIED);
 	ui.actionCloudstoragesave->setEnabled(prefs.cloud_verification_status == CS_VERIFIED);
-#endif
+	ui.actionTake_cloud_storage_online->setEnabled(prefs.cloud_verification_status == CS_VERIFIED && prefs.git_local_only);
 }
 
 PlannerDetails *MainWindow::plannerDetails() const {
@@ -335,10 +448,9 @@ MainWindow *MainWindow::instance()
 // this gets called after we download dives from a divecomputer
 void MainWindow::refreshDisplay(bool doRecreateDiveList)
 {
-	getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 	information()->reload();
 	TankInfoModel::instance()->update();
-	GlobeGPS::instance()->reload();
+	MapWidget::instance()->reload();
 	if (doRecreateDiveList)
 		recreateDiveList();
 
@@ -409,7 +521,7 @@ void MainWindow::current_dive_changed(int divenr)
 	graphics()->plotDive();
 	information()->updateDiveInfo();
 	configureToolbar();
-	GlobeGPS::instance()->reload();
+	MapWidget::instance()->reload();
 }
 
 void MainWindow::on_actionNew_triggered()
@@ -425,7 +537,7 @@ void MainWindow::on_actionOpen_triggered()
 	// yes, this look wrong to use getSaveFileName() for the open dialog, but we need to be able
 	// to enter file names that don't exist in order to use our git syntax /path/to/dir[branch]
 	// with is a potentially valid input, but of course won't exist. So getOpenFileName() wouldn't work
-	QFileDialog dialog(this, tr("Open file"), lastUsedDir(), filter());
+	QFileDialog dialog(this, tr("Open file"), lastUsedDir(), filter_open());
 	dialog.setFileMode(QFileDialog::AnyFile);
 	dialog.setViewMode(QFileDialog::Detail);
 	dialog.setLabelText(QFileDialog::Accept, tr("Open"));
@@ -468,11 +580,11 @@ void MainWindow::on_actionCloudstorageopen_triggered()
 		return;
 
 	QString filename;
-	if (getCloudURL(filename)) {
-		getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
+	if (getCloudURL(filename))
 		return;
-	}
-	qDebug() << filename;
+
+	if (verbose)
+		qDebug() << "Opening cloud storage from:" << filename;
 
 	closeCurrentFile();
 
@@ -495,34 +607,41 @@ void MainWindow::on_actionCloudstorageopen_triggered()
 void MainWindow::on_actionCloudstoragesave_triggered()
 {
 	QString filename;
-	if (getCloudURL(filename)) {
-		getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
+	if (!dive_table.nr) {
+		report_error(qPrintable(tr("Don't save an empty log to the cloud")));
 		return;
 	}
-	qDebug() << filename;
+	if (getCloudURL(filename))
+		return;
+
+	if (verbose)
+		qDebug() << "Saving cloud storage to:" << filename;
 	if (information()->isEditing())
 		information()->acceptChanges();
 
 	showProgressBar();
 
-	if (save_dives(filename.toUtf8().data())) {
-		getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
+	if (save_dives(filename.toUtf8().data()))
 		return;
-	}
 
 	hideProgressBar();
 
-	getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 	set_filename(filename.toUtf8().data(), true);
 	setTitle(MWTF_FILENAME);
 	mark_divelist_changed(false);
+}
+
+void MainWindow::on_actionTake_cloud_storage_online_triggered()
+{
+	prefs.git_local_only = false;
+	ui.actionTake_cloud_storage_online->setEnabled(false);
 }
 
 void learnImageDirs(QStringList dirnames)
 {
 	QList<QFuture<void> > futures;
 	foreach (QString dir, dirnames) {
-		futures << QtConcurrent::run(learnImages, QDir(dir), 10, false);
+		futures << QtConcurrent::run(learnImages, QDir(dir), 10);
 	}
 	DivePictureModel::instance()->updateDivePicturesWhenDone(futures);
 }
@@ -530,7 +649,7 @@ void learnImageDirs(QStringList dirnames)
 void MainWindow::on_actionHash_images_triggered()
 {
 	QFuture<void> future;
-	QFileDialog dialog(this, tr("Traverse image directories"), lastUsedDir(), filter());
+	QFileDialog dialog(this, tr("Traverse image directories"), lastUsedDir());
 	dialog.setFileMode(QFileDialog::Directory);
 	dialog.setViewMode(QFileDialog::Detail);
 	dialog.setLabelText(QFileDialog::Accept, tr("Scan"));
@@ -553,13 +672,11 @@ ProfileWidget2 *MainWindow::graphics() const
 
 void MainWindow::cleanUpEmpty()
 {
-	information()->clearStats();
-	information()->clearInfo();
-	information()->clearEquipment();
+	information()->clearTabs();
 	information()->updateDiveInfo(true);
 	graphics()->setEmptyState();
 	dive_list()->reload(DiveTripModel::TREE);
-	GlobeGPS::instance()->reload();
+	MapWidget::instance()->reload();
 	if (!existing_filename)
 		setTitle(MWTF_DEFAULT);
 	disableShortcuts();
@@ -685,7 +802,6 @@ void MainWindow::on_actionQuit_triggered()
 void MainWindow::on_actionDownloadDC_triggered()
 {
 	DownloadFromDCWidget dlg(this);
-
 	dlg.exec();
 }
 
@@ -710,6 +826,10 @@ void MainWindow::on_actionEditDeviceNames_triggered()
 
 bool MainWindow::plannerStateClean()
 {
+	if (progressDialog)
+		// we are accessing the cloud, so let's not switch into Add or Plan mode
+		return false;
+
 	if (DivePlannerPointsModel::instance()->currentMode() != DivePlannerPointsModel::NOTHING ||
 		information()->isEditing()) {
 		QMessageBox::warning(this, tr("Warning"), tr("Please save or cancel the current dive edit before trying to add a dive."));
@@ -768,9 +888,37 @@ void MainWindow::printPlan()
 	if (dialog->exec() != QDialog::Accepted)
 		return;
 
+	/* render the profile as a pixmap that is inserted as base64 data into a HTML <img> tag
+	 * make it fit a page width defined by 2 cm margins via QTextDocument->print() (cannot be changed?)
+	 * the height of the profile is 40% of the page height.
+	 */
+	QSizeF renderSize = printer.pageRect(QPrinter::Inch).size();
+	const qreal marginsInch = 1.57480315; // = (2 x 2cm) / 2.45cm/inch
+	renderSize.setWidth((renderSize.width() - marginsInch) * printer.resolution());
+	renderSize.setHeight(((renderSize.height() - marginsInch) * printer.resolution()) / 2.5);
+
+	QPixmap pixmap(renderSize.toSize());
+	QPainter painter(&pixmap);
+	painter.setRenderHint(QPainter::Antialiasing);
+	painter.setRenderHint(QPainter::SmoothPixmapTransform);
+
+	ProfileWidget2 *profile = graphics();
+	QSize origSize = profile->size();
+	profile->resize(renderSize.toSize());
+	profile->setPrintMode(true);
+	profile->render(&painter);
+	profile->resize(origSize);
+	profile->setPrintMode(false);
+
+	QByteArray byteArray;
+	QBuffer buffer(&byteArray);
+	pixmap.save(&buffer, "PNG");
+	QString profileImage = QString("<img src=\"data:image/png;base64,") + byteArray.toBase64() + "\"/><br><br>";
+	withDisclaimer = profileImage + withDisclaimer;
+
 	plannerDetails()->divePlanOutput()->setHtml(withDisclaimer);
 	plannerDetails()->divePlanOutput()->print(&printer);
-	plannerDetails()->divePlanOutput()->setHtml(diveplan);
+	plannerDetails()->divePlanOutput()->setHtml(displayed_dive.notes);
 #endif
 }
 
@@ -781,17 +929,19 @@ void MainWindow::setupForAddAndPlan(const char *model)
 	clear_dive_site(&displayed_dive_site);
 	displayed_dive.id = dive_getUniqID(&displayed_dive);
 	displayed_dive.when = QDateTime::currentMSecsSinceEpoch() / 1000L + gettimezoneoffset() + 3600;
-	displayed_dive.dc.model = model; // don't translate! this is stored in the XML file
+	displayed_dive.dc.model = strdup(model); // don't translate! this is stored in the XML file
+	dc_number = 1;
 	// setup the dive cylinders
 	DivePlannerPointsModel::instance()->clear();
 	DivePlannerPointsModel::instance()->setupCylinders();
+
 }
 
 void MainWindow::on_actionReplanDive_triggered()
 {
-	if (!plannerStateClean() || !current_dive || !current_dive->dc.model)
+	if (!plannerStateClean() || !current_dive)
 		return;
-	else if (strcmp(current_dive->dc.model, "planned dive")) {
+	else if (!current_dive->dc.model || strcmp(current_dive->dc.model, "planned dive")) {
 		if (QMessageBox::warning(this, tr("Warning"), tr("Trying to replan a dive that's not a planned dive."),
 					 QMessageBox::Ok | QMessageBox::Cancel) == QMessageBox::Cancel)
 					return;
@@ -804,6 +954,11 @@ void MainWindow::on_actionReplanDive_triggered()
 	graphics()->clearHandlers();
 	setApplicationState("PlanDive");
 	divePlannerWidget()->setReplanButton(true);
+	divePlannerWidget()->setupStartTime(QDateTime::fromMSecsSinceEpoch(1000 * current_dive->when, Qt::UTC));
+	if (current_dive->surface_pressure.mbar)
+		divePlannerWidget()->setSurfacePressure(current_dive->surface_pressure.mbar);
+	if (current_dive->salinity)
+		divePlannerWidget()->setSalinity(current_dive->salinity);
 	DivePlannerPointsModel::instance()->loadFromDive(current_dive);
 	reset_cylinders(&displayed_dive, true);
 }
@@ -823,6 +978,12 @@ void MainWindow::on_actionDivePlanner_triggered()
 	setupForAddAndPlan("planned dive"); // don't translate, stored in XML file
 	DivePlannerPointsModel::instance()->setupStartTime();
 	DivePlannerPointsModel::instance()->createSimpleDive();
+	// plan the dive in the same mode as the currently selected one
+	if (current_dive) {
+		divePlannerSettingsWidget()->setDiveMode(current_dive->dc.divemode);
+		if (current_dive->salinity)
+			divePlannerWidget()->setSalinity(current_dive->salinity);
+	}
 	DivePictureModel::instance()->updateDivePictures();
 	divePlannerWidget()->setReplanButton(false);
 }
@@ -859,6 +1020,11 @@ void MainWindow::on_actionAddDive_triggered()
 	DivePlannerPointsModel::instance()->createSimpleDive();
 	configureToolbar();
 	graphics()->plotDive();
+	fixup_dc_duration(&displayed_dive.dc);
+	displayed_dive.duration = displayed_dive.dc.duration;
+
+	// now that we have the correct depth and duration, update the dive info
+	information()->updateDepthDuration();
 }
 
 void MainWindow::on_actionEditDive_triggered()
@@ -878,7 +1044,7 @@ void MainWindow::on_actionEditDive_triggered()
 	disableShortcuts();
 	DivePlannerPointsModel::instance()->setPlanMode(DivePlannerPointsModel::ADD);
 	graphics()->setAddState();
-	GlobeGPS::instance()->endGetDiveCoordinates();
+	MapWidget::instance()->endGetDiveCoordinates();
 	setApplicationState("EditDive");
 	DivePlannerPointsModel::instance()->loadFromDive(current_dive);
 	information()->enableEdition(MainTab::MANUALLY_ADDED_DIVE);
@@ -909,8 +1075,8 @@ void MainWindow::on_actionYearlyStatistics_triggered()
 	QTreeView *view = new QTreeView();
 	view->setModel(m);
 	l->addWidget(view);
-	d.resize(width() * .8, height() / 2);
-	d.move(width() * .1, height() / 4);
+	d.resize(lrint(width() * .8), height() / 2);
+	d.move(lrint(width() * .1), height() / 4);
 	QShortcut *close = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_W), &d);
 	connect(close, SIGNAL(activated()), &d, SLOT(close()));
 	QShortcut *quit = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_Q), &d);
@@ -956,10 +1122,10 @@ void MainWindow::on_actionViewInfo_triggered()
 	ui.mainSplitter->setSizes(BEHAVIOR << EXPANDED << COLLAPSED);
 }
 
-void MainWindow::on_actionViewGlobe_triggered()
+void MainWindow::on_actionViewMap_triggered()
 {
 	TOGGLE_COLLAPSABLE( true );
-	beginChangeState(GLOBE_MAXIMIZED);
+	beginChangeState(MAP_MAXIMIZED);
 	ui.mainSplitter->setSizes(BEHAVIOR << COLLAPSED << EXPANDED);
 	ui.bottomSplitter->setSizes(BEHAVIOR << COLLAPSED << EXPANDED);
 }
@@ -973,19 +1139,19 @@ void MainWindow::on_actionViewAll_triggered()
 	const int appH = qApp->desktop()->size().height();
 	const int appW = qApp->desktop()->size().width();
 	if (mainSizes.empty()) {
-		mainSizes.append(appH * 0.7);
-		mainSizes.append(appH * 0.3);
+		mainSizes.append(lrint(appH * 0.7));
+		mainSizes.append(lrint(appH * 0.3));
 	}
 	static QList<int> infoProfileSizes;
 	if (infoProfileSizes.empty()) {
-		infoProfileSizes.append(appW * 0.3);
-		infoProfileSizes.append(appW * 0.7);
+		infoProfileSizes.append(lrint(appW * 0.3));
+		infoProfileSizes.append(lrint(appW * 0.7));
 	}
 
 	static QList<int> listGlobeSizes;
 	if (listGlobeSizes.empty()) {
-		listGlobeSizes.append(appW * 0.7);
-		listGlobeSizes.append(appW * 0.3);
+		listGlobeSizes.append(lrint(appW * 0.7));
+		listGlobeSizes.append(lrint(appW * 0.3));
 	}
 
 	QSettings settings;
@@ -1093,34 +1259,89 @@ void MainWindow::on_actionUserSurvey_triggered()
 	survey->show();
 }
 
-QString MainWindow::filter()
+QString MainWindow::filter_open()
 {
 	QString f;
-	f += "Dive log files ( *.ssrf ";
-	f += "*.can *.CAN ";
-	f += "*.db *.DB " ;
-	f += "*.sql *.SQL " ;
-	f += "*.dld *.DLD ";
-	f += "*.jlb *.JLB ";
-	f += "*.lvd *.LVD ";
-	f += "*.sde *.SDE ";
-	f += "*.udcf *.UDCF ";
-	f += "*.uddf *.UDDF ";
-	f += "*.xml *.XML ";
-	f += "*.dlf *.DLF ";
+	f += tr("Dive log files");
+	f += " (*.ssrf";
+	f += " *.xml";
+	f += " *.can";
+	f += " *.db" ;
+	f += " *.sql" ;
+	f += " *.dld";
+	f += " *.jlb";
+	f += " *.lvd";
+	f += " *.sde";
+	f += " *.udcf";
+	f += " *.uddf";
+	f += " *.dlf";
+	f += " *.log";
+	f += " *.txt";
+	f += " *.apd";
+	f += " *.dive";
+	f += " *.zxu *.zxl";
 	f += ");;";
 
-	f += "Subsurface (*.ssrf);;";
-	f += "Cochran (*.can *.CAN);;";
-	f += "DiveLogs.de (*.dld *.DLD);;";
-	f += "JDiveLog  (*.jlb *.JLB);;";
-	f += "Liquivision (*.lvd *.LVD);;";
-	f += "Suunto (*.sde *.SDE *.db *.DB);;";
-	f += "UDCF (*.udcf *.UDCF);;";
-	f += "UDDF (*.uddf *.UDDF);;";
-	f += "XML (*.xml *.XML)";
-	f += "Divesoft (*.dlf *.DLF)";
-	f += "Datatrak/WLog Files (*.log *.LOG)";
+	f += tr("Subsurface files") + " (*.ssrf *.xml);;";
+	f += tr("Cochran") + " (*.can);;";
+	f += tr("DiveLogs.de") + " (*.dld);;";
+	f += tr("JDiveLog") + " (*.jlb);;";
+	f += tr("Liquivision") + " (*.lvd);;";
+	f += tr("Suunto") + " (*.sde *.db);;";
+	f += tr("UDCF") + " (*.udcf);;";
+	f += tr("UDDF") + " (*.uddf);;";
+	f += tr("XML") + " (*.xml);;";
+	f += tr("Divesoft") + " (*.dlf);;";
+	f += tr("Datatrak/WLog") + " (*.log);;";
+	f += tr("MkVI files") + " (*.txt);;";
+	f += tr("APD log viewer") + " (*.apd);;";
+	f += tr("OSTCtools") + " (*.dive);;";
+	f += tr("DAN DL7") + " (*.zxu *.zxl)";
+
+	return f;
+}
+
+QString MainWindow::filter_import()
+{
+	QString f;
+	f += tr("Dive log files");
+	f += " (*.ssrf";
+	f += " *.xml";
+	f += " *.can";
+	f += " *.csv";
+	f += " *.db" ;
+	f += " *.sql" ;
+	f += " *.dld";
+	f += " *.jlb";
+	f += " *.lvd";
+	f += " *.sde";
+	f += " *.udcf";
+	f += " *.uddf";
+	f += " *.dlf";
+	f += " *.log";
+	f += " *.txt";
+	f += " *.apd";
+	f += " *.dive";
+	f += " *.zxu *.zxl";
+	f += ");;";
+
+	f += tr("Subsurface files") + " (*.ssrf *.xml);;";
+	f += tr("Cochran") + " (*.can);;";
+	f += tr("CSV") + " (*.csv *.CSV);;";
+	f += tr("DiveLogs.de") + " (*.dld);;";
+	f += tr("JDiveLog") + " (*.jlb);;";
+	f += tr("Liquivision") + " (*.lvd);;";
+	f += tr("Suunto") + " (*.sde *.db);;";
+	f += tr("UDCF") + " (*.udcf);;";
+	f += tr("UDDF") + " (*.uddf);;";
+	f += tr("XML") + " (*.xml);;";
+	f += tr("Divesoft") + " (*.dlf);;";
+	f += tr("Datatrak/WLog") + " (*.log);;";
+	f += tr("MkVI files") + " (*.txt);;";
+	f += tr("APD log viewer") + " (*.apd);;";
+	f += tr("OSTCtools") + " (*.dive);;";
+	f += tr("DAN DL7") + " (*.zxu *.zxl);;";
+	f += tr("All files") + " (*.*)";
 
 	return f;
 }
@@ -1171,8 +1392,8 @@ void MainWindow::initialUiSetup()
 	case VIEWALL:
 		on_actionViewAll_triggered();
 		break;
-	case GLOBE_MAXIMIZED:
-		on_actionViewGlobe_triggered();
+	case MAP_MAXIMIZED:
+		on_actionViewMap_triggered();
 		break;
 	case INFO_MAXIMIZED:
 		on_actionViewInfo_triggered();
@@ -1188,63 +1409,17 @@ void MainWindow::initialUiSetup()
 	show();
 }
 
-const char *getSetting(const QSettings &s,const QString& name)
-{
-	QVariant v;
-	v = s.value(name);
-	if (v.isValid()) {
-		return strdup(v.toString().toUtf8().data());
-	}
-	return NULL;
-}
-
-#define TOOLBOX_PREF_BUTTON(pref, setting, button) \
-	prefs.pref = s.value(#setting).toBool();   \
-	ui.button->setChecked(prefs.pref);
-
 void MainWindow::readSettings()
 {
 	static bool firstRun = true;
-	QSettings s;
-	// the static object for preferences already reads in the settings
-	// and sets up the font, so just get what we need for the toolbox and other widgets here
+	init_proxy();
 
-	s.beginGroup("TecDetails");
-	TOOLBOX_PREF_BUTTON(calcalltissues, calcalltissues, profCalcAllTissues);
-	TOOLBOX_PREF_BUTTON(calcceiling, calcceiling, profCalcCeiling);
-	TOOLBOX_PREF_BUTTON(dcceiling, dcceiling, profDcCeiling);
-	TOOLBOX_PREF_BUTTON(ead, ead, profEad);
-	TOOLBOX_PREF_BUTTON(calcceiling3m, calcceiling3m, profIncrement3m);
-	TOOLBOX_PREF_BUTTON(mod, mod, profMod);
-	TOOLBOX_PREF_BUTTON(calcndltts, calcndltts, profNdl_tts);
-	TOOLBOX_PREF_BUTTON(pp_graphs.phe, phegraph, profPhe);
-	TOOLBOX_PREF_BUTTON(pp_graphs.pn2, pn2graph, profPn2);
-	TOOLBOX_PREF_BUTTON(pp_graphs.po2, po2graph, profPO2);
-	TOOLBOX_PREF_BUTTON(hrgraph, hrgraph, profHR);
-	TOOLBOX_PREF_BUTTON(rulergraph, rulergraph, profRuler);
-	TOOLBOX_PREF_BUTTON(show_sac, show_sac, profSAC);
-	TOOLBOX_PREF_BUTTON(show_pictures_in_profile, show_pictures_in_profile, profTogglePicture);
-	TOOLBOX_PREF_BUTTON(tankbar, tankbar, profTankbar);
-	TOOLBOX_PREF_BUTTON(percentagegraph, percentagegraph, profTissues);
-	TOOLBOX_PREF_BUTTON(zoomed_plot, zoomed_plot, profScaled);
-	s.endGroup(); // note: why doesn't the list of 17 buttons match the order in the gui?
-	s.beginGroup("DiveComputer");
-	default_dive_computer_vendor = getSetting(s, "dive_computer_vendor");
-	default_dive_computer_product = getSetting(s, "dive_computer_product");
-	default_dive_computer_device = getSetting(s, "dive_computer_device");
-	default_dive_computer_download_mode = s.value("dive_computer_download_mode").toInt();
-	s.endGroup();
-	QNetworkProxy proxy;
-	proxy.setType(QNetworkProxy::ProxyType(prefs.proxy_type));
-	proxy.setHostName(prefs.proxy_host);
-	proxy.setPort(prefs.proxy_port);
-	if (prefs.proxy_auth) {
-		proxy.setUser(prefs.proxy_user);
-		proxy.setPassword(prefs.proxy_pass);
-	}
-	QNetworkProxy::setApplicationProxy(proxy);
+	// now make sure that the cloud menu items are enabled IFF cloud account is verified
+	enableDisableCloudActions();
 
 #if !defined(SUBSURFACE_MOBILE)
+	QSettings s; //TODO: this 's' exists only for the loadRecentFiles, remove it.
+
 	loadRecentFiles(&s);
 	if (firstRun) {
 		checkSurvey(&s);
@@ -1263,7 +1438,6 @@ void MainWindow::checkSurvey(QSettings *s)
 		s->setValue("FirstUse42", value);
 	}
 	// wait a week for production versions, but not at all for non-tagged builds
-	QString ver(subsurface_version());
 	int waitTime = 7;
 	QDate firstUse42 = s->value("FirstUse42").toDate();
 	if (run_survey || (firstUse42.daysTo(QDate().currentDate()) > waitTime && !s->contains("SurveyDone"))) {
@@ -1507,7 +1681,7 @@ int MainWindow::file_save_as(void)
 	}
 	// create a file dialog that allows us to save to a new file
 	QFileDialog selection_dialog(this, tr("Save file as"), default_filename,
-					 tr("Subsurface XML files (*.ssrf *.xml *.XML)"));
+					 tr("Subsurface files") + " (*.ssrf *.xml)");
 	selection_dialog.setAcceptMode(QFileDialog::AcceptSave);
 	selection_dialog.setFileMode(QFileDialog::AnyFile);
 	selection_dialog.setDefaultSuffix("");
@@ -1534,12 +1708,9 @@ int MainWindow::file_save_as(void)
 	if (information()->isEditing())
 		information()->acceptChanges();
 
-	if (save_dives(filename.toUtf8().data())) {
-		getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
+	if (save_dives(filename.toUtf8().data()))
 		return -1;
-	}
 
-	getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 	set_filename(filename.toUtf8().data(), true);
 	setTitle(MWTF_FILENAME);
 	mark_divelist_changed(false);
@@ -1571,14 +1742,12 @@ int MainWindow::file_save(void)
 	if (is_cloud)
 		showProgressBar();
 	if (save_dives(existing_filename)) {
-		getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 		if (is_cloud)
 			hideProgressBar();
 		return -1;
 	}
 	if (is_cloud)
 		hideProgressBar();
-	getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 	mark_divelist_changed(false);
 	addRecentFile(QStringList() << QString(existing_filename));
 	return 0;
@@ -1589,22 +1758,25 @@ NotificationWidget *MainWindow::getNotificationWidget()
 	return ui.mainErrorMessage;
 }
 
-void MainWindow::showError()
-{
-	getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
-}
-
 QString MainWindow::displayedFilename(QString fullFilename)
 {
 	QFile f(fullFilename);
 	QFileInfo fileInfo(f);
 	QString fileName(fileInfo.fileName());
 
-	if (fullFilename.contains(prefs.cloud_git_url))
-		return tr("[cloud storage for] %1").arg(fileName.left(fileName.indexOf('[')));
-	else
+	if (fullFilename.contains(prefs.cloud_git_url)) {
+		QString email = fileName.left(fileName.indexOf('['));
+		if (prefs.git_local_only) {
+			ui.actionTake_cloud_storage_online->setEnabled(true);
+			return tr("[local cache for] %1").arg(email);
+		} else {
+			return tr("[cloud storage for] %1").arg(email);
+		}
+	} else {
 		return fileName;
+	}
 }
+
 
 void MainWindow::setAutomaticTitle()
 {
@@ -1645,6 +1817,8 @@ void MainWindow::importFiles(const QStringList fileNames)
 
 void MainWindow::importTxtFiles(const QStringList fileNames)
 {
+	QStringList csvFiles;
+
 	if (fileNames.isEmpty())
 		return;
 
@@ -1654,7 +1828,18 @@ void MainWindow::importTxtFiles(const QStringList fileNames)
 		fileNamePtr = QFile::encodeName(fileNames.at(i));
 		csv = fileNamePtr.data();
 		csv.replace(strlen(csv.data()) - 3, 3, "csv");
-		parse_txt_file(fileNamePtr.data(), csv);
+
+		QFileInfo check_file(csv);
+		if (check_file.exists() && check_file.isFile()) {
+			if (parse_txt_file(fileNamePtr.data(), csv) == 0)
+				csvFiles += fileNames.at(i);
+		} else {
+			csvFiles += fileNamePtr;
+		}
+	}
+	if (csvFiles.size()) {
+		DiveLogImportDialog *diveLogImport = new DiveLogImportDialog(csvFiles, this);
+		diveLogImport->show();
 	}
 	process_dives(true, false);
 	refreshDisplay();
@@ -1662,7 +1847,6 @@ void MainWindow::importTxtFiles(const QStringList fileNames)
 
 void MainWindow::loadFiles(const QStringList fileNames)
 {
-	bool showWarning = false;
 	if (fileNames.isEmpty()) {
 		refreshDisplay();
 		return;
@@ -1679,19 +1863,11 @@ void MainWindow::loadFiles(const QStringList fileNames)
 		if (!error) {
 			set_filename(fileNamePtr.data(), true);
 			setTitle(MWTF_FILENAME);
-			// if there were any messages, show them
-			QString warning = get_error_string();
-			if (!warning.isEmpty()) {
-				showWarning = true;
-				getNotificationWidget()->showNotification(warning , KMessageWidget::Information);
-			}
 		} else {
 			failedParses.append(fileNames.at(i));
 		}
 	}
 	hideProgressBar();
-	if (!showWarning)
-		getNotificationWidget()->hideNotification();
 	process_dives(false, false);
 	addRecentFile(fileNames);
 	removeRecentFile(failedParses);
@@ -1713,31 +1889,17 @@ void MainWindow::loadFiles(const QStringList fileNames)
 
 void MainWindow::on_actionImportDiveLog_triggered()
 {
-	QStringList fileNames = QFileDialog::getOpenFileNames(this, tr("Open dive log file"), lastUsedDir(),
-		tr("Dive log files (*.ssrf *.can *.csv *.db *.sql *.dld *.jlb *.lvd *.sde *.udcf *.uddf *.xml *.txt *.dlf *.apd"
-			"*.SSRF *.CAN *.CSV *.DB *.SQL *.DLD *.JLB *.LVD *.SDE *.UDCF *.UDDF *.xml *.TXT *.DLF *.APD);;"
-			"Cochran files (*.can *.CAN);;"
-			"CSV files (*.csv *.CSV);;"
-			"DiveLog.de files (*.dld *.DLD);;"
-			"JDiveLog files (*.jlb *.JLB);;"
-			"Liquivision files (*.lvd *.LVD);;"
-			"MkVI files (*.txt *.TXT);;"
-			"Suunto files (*.sde *.db *.SDE *.DB);;"
-			"Divesoft files (*.dlf *.DLF);;"
-			"UDDF/UDCF files (*.uddf *.udcf *.UDDF *.UDCF);;"
-			"XML files (*.xml *.XML);;"
-			"APD log viewer (*.apd *.APD);;"
-			"Datatrak/WLog Files (*.log *.LOG);;"
-			"OSTCtools Files (*.dive *.DIVE);;"
-			"All files (*)"));
+	QStringList fileNames = QFileDialog::getOpenFileNames(this, tr("Open dive log file"), lastUsedDir(), filter_import());
 
 	if (fileNames.isEmpty())
 		return;
 	updateLastUsedDir(QFileInfo(fileNames[0]).dir().path());
 
-	QStringList logFiles = fileNames.filter(QRegExp("^.*\\.(?!(csv|txt|apd))", Qt::CaseInsensitive));
+	QStringList logFiles = fileNames.filter(QRegExp("^(?!.*\\.(csv|txt|apd|zxu|zxl))", Qt::CaseInsensitive));
 	QStringList csvFiles = fileNames.filter(".csv", Qt::CaseInsensitive);
 	csvFiles += fileNames.filter(".apd", Qt::CaseInsensitive);
+	csvFiles += fileNames.filter(".zxu", Qt::CaseInsensitive);
+	csvFiles += fileNames.filter(".zxl", Qt::CaseInsensitive);
 	QStringList txtFiles = fileNames.filter(".txt", Qt::CaseInsensitive);
 
 	if (logFiles.size()) {
@@ -1782,45 +1944,9 @@ void MainWindow::editCurrentDive()
 	}
 }
 
-// TODO: Remove the dependency to the PreferencesDialog here.
-#define PREF_PROFILE(QT_PREFS)            \
-	QSettings s;                      \
-	s.beginGroup("TecDetails");       \
-	s.setValue(#QT_PREFS, triggered); \
-	PreferencesDialog::instance()->emitSettingsChanged();
-
-#define TOOLBOX_PREF_PROFILE(METHOD, INTERNAL_PREFS, QT_PREFS)   \
-	void MainWindow::on_##METHOD##_triggered(bool triggered) \
-	{                                                        \
-		prefs.INTERNAL_PREFS = triggered;                \
-		PREF_PROFILE(QT_PREFS);                          \
-	}
-
-// note: why doesn't the list of 17 buttons match the order in the gui? or the order above? (line 1136)
-TOOLBOX_PREF_PROFILE(profCalcAllTissues, calcalltissues, calcalltissues);
-TOOLBOX_PREF_PROFILE(profCalcCeiling, calcceiling, calcceiling);
-TOOLBOX_PREF_PROFILE(profDcCeiling, dcceiling, dcceiling);
-TOOLBOX_PREF_PROFILE(profEad, ead, ead);
-TOOLBOX_PREF_PROFILE(profIncrement3m, calcceiling3m, calcceiling3m);
-TOOLBOX_PREF_PROFILE(profMod, mod, mod);
-TOOLBOX_PREF_PROFILE(profNdl_tts, calcndltts, calcndltts);
-TOOLBOX_PREF_PROFILE(profPhe, pp_graphs.phe, phegraph);
-TOOLBOX_PREF_PROFILE(profPn2, pp_graphs.pn2, pn2graph);
-TOOLBOX_PREF_PROFILE(profPO2, pp_graphs.po2, po2graph);
-TOOLBOX_PREF_PROFILE(profHR, hrgraph, hrgraph);
-TOOLBOX_PREF_PROFILE(profRuler, rulergraph, rulergraph);
-TOOLBOX_PREF_PROFILE(profSAC, show_sac, show_sac);
-TOOLBOX_PREF_PROFILE(profScaled, zoomed_plot, zoomed_plot);
-TOOLBOX_PREF_PROFILE(profTogglePicture, show_pictures_in_profile, show_pictures_in_profile);
-TOOLBOX_PREF_PROFILE(profTankbar, tankbar, tankbar);
-TOOLBOX_PREF_PROFILE(profTissues, percentagegraph, percentagegraph);
-// couldn't the args to TOOLBOX_PREF_PROFILE be made to go in the same sequence as TOOLBOX_PREF_BUTTON?
-
 void MainWindow::turnOffNdlTts()
 {
-	const bool triggered = false;
-	prefs.calcndltts = triggered;
-	PREF_PROFILE(calcndltts);
+	SettingsObjectWrapper::instance()->techDetails->setCalcndltts(false);
 }
 
 #undef TOOLBOX_PREF_PROFILE
@@ -1861,10 +1987,18 @@ void MainWindow::on_paste_triggered()
 
 void MainWindow::on_actionFilterTags_triggered()
 {
-	if (ui.multiFilter->isVisible())
+	if (ui.multiFilter->isVisible()) {
 		ui.multiFilter->closeFilter();
-	else
+		ui.actionFilterTags->setChecked(false);
+	} else {
 		ui.multiFilter->setVisible(true);
+		ui.actionFilterTags->setChecked(true);
+	}
+}
+
+void MainWindow::setCheckedActionFilterTags(bool checked)
+{
+	ui.actionFilterTags->setChecked(checked);
 }
 
 void MainWindow::registerApplicationState(const QByteArray& state, QWidget *topLeft, QWidget *topRight, QWidget *bottomLeft, QWidget *bottomRight)
@@ -1926,8 +2060,9 @@ void MainWindow::showProgressBar()
 
 	progressDialog = new QProgressDialog(tr("Contacting cloud service..."), tr("Cancel"), 0, 100, this);
 	progressDialog->setWindowModality(Qt::WindowModal);
-	progressDialog->setMinimumDuration(200);
+	progressDialog->setMinimumDuration(0);
 	progressDialogCanceled = false;
+	progressCounter = 0;
 	connect(progressDialog, SIGNAL(canceled()), this, SLOT(cancelCloudStorageOperation()));
 }
 

@@ -22,8 +22,13 @@ HINTS
     /usr/include
 )
 
+IF ( LIBGIT2_DYNAMIC )
+    SET( LIBGIT2_SO libgit2.so )
+ENDIF()
+
 FIND_LIBRARY( LIBGIT2_LIBRARIES
 NAMES
+    ${LIBGIT2_SO}
     libgit2.a
     git2
 HINTS
@@ -32,7 +37,12 @@ HINTS
     /usr/local/include
     /usr/include
 )
-SET(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES} -lssl -lcrypto)
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+	SET(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES})
+else()
+	SET(LIBGIT2_LIBRARIES ${LIBGIT2_LIBRARIES} -lssl -lcrypto)
+endif()
 
 INCLUDE( FindPackageHandleStandardArgs )
 FIND_PACKAGE_HANDLE_STANDARD_ARGS( git2 DEFAULT_MSG LIBGIT2_INCLUDE_DIR LIBGIT2_LIBRARIES )
+include_directories(${LIBGIT2_INCLUDE_DIR}})

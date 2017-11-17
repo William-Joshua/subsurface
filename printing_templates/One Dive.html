@@ -142,7 +142,7 @@
 							</tr>
 							<tr>
 								<td class="fieldTitle">
-									<h1> Max depth </h1>
+									<h1> Max. depth </h1>
 								</td>
 								<td class="fieldData">
 									<p> {{ dive.depth }} </p>
@@ -192,7 +192,7 @@
 							</tr>
 							<tr>
 								<td class="fieldTitle">
-									<h1> Dive Master </h1>
+									<h1> Divemaster </h1>
 								</td>
 								<td class="fieldData">
 									<p> {{ dive.divemaster }} </p>
@@ -210,7 +210,7 @@
 							<tr>
 								<td class="fieldData">
 									<div class="textArea">
-										<p> {{ dive.notes }} </p>
+										<p> {{ dive.notes|safe }} </p>
 									</div>
 								</td>
 							</tr>

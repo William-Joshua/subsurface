@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef SIMPLEWIDGETS_H
 #define SIMPLEWIDGETS_H
 
@@ -8,6 +9,7 @@ class QNetworkReply;
 #include <QWidget>
 #include <QGroupBox>
 #include <QDialog>
+#include <QTextEdit>
 #include <stdint.h>
 
 #include "ui_renumber.h"
@@ -18,8 +20,8 @@ class QNetworkReply;
 #include "ui_divecomponentselection.h"
 #include "ui_listfilter.h"
 #include "ui_filterwidget.h"
-#include "exif.h"
-#include <dive.h>
+#include "core/exif.h"
+#include "core/dive.h"
 
 
 class MinMaxAvgWidget : public QWidget {
@@ -42,6 +44,7 @@ public:
 	void overrideMinToolTipText(const QString &newTip);
 	void overrideAvgToolTipText(const QString &newTip);
 	void overrideMaxToolTipText(const QString &newTip);
+	void setAvgVisibility(const bool visible);
 	void clear();
 
 private:
@@ -108,6 +111,7 @@ slots:
 	void syncCameraClicked();
 	void dcDateTimeChanged(const QDateTime &);
 	void timeEditChanged(const QTime &time);
+	void timeEditChanged();
 	void updateInvalid();
 	void matchAllImagesToggled(bool);
 
@@ -129,31 +133,6 @@ private:
 };
 
 class QCalendarWidget;
-
-class DateWidget : public QWidget {
-	Q_OBJECT
-public:
-	DateWidget(QWidget *parent = 0);
-	QDate date() const;
-public
-slots:
-	void setDate(const QDate &date);
-
-protected:
-	void paintEvent(QPaintEvent *event);
-	void mousePressEvent(QMouseEvent *event);
-	void focusInEvent(QFocusEvent *);
-	void focusOutEvent(QFocusEvent *);
-	void keyPressEvent(QKeyEvent *);
-	void changeEvent(QEvent *);
-	bool eventFilter(QObject *, QEvent *);
-signals:
-	void dateChanged(const QDate &date);
-
-private:
-	QDate mDate;
-	QCalendarWidget *calendarWidget;
-};
 
 class DiveComponentSelection : public QDialog {
 	Q_OBJECT
@@ -229,6 +208,26 @@ public:
 
 private:
 	Ui::FilterWidget ui;
+};
+
+class TextHyperlinkEventFilter : public QObject {
+	Q_OBJECT
+public:
+	explicit TextHyperlinkEventFilter(QTextEdit *txtEdit);
+
+	virtual bool eventFilter(QObject *target, QEvent *evt);
+
+private:
+	void handleUrlClick(const QString &urlStr);
+	void handleUrlTooltip(const QString &urlStr, const QPoint &pos);
+	bool stringMeetsOurUrlRequirements(const QString &maybeUrlStr);
+	QString fromCursorTilWhitespace(QTextCursor *cursor, const bool searchBackwards);
+	QString tryToFormulateUrl(QTextCursor *cursor);
+
+	QTextEdit const *const textEdit;
+	QWidget const *const scrollView;
+
+	Q_DISABLE_COPY(TextHyperlinkEventFilter)
 };
 
 bool isGnome3Session();

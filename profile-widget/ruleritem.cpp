@@ -1,13 +1,15 @@
-#include "ruleritem.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "profile-widget/ruleritem.h"
 #ifndef SUBSURFACE_MOBILE
-#include "preferences/preferencesdialog.h"
+#include "desktop-widgets/preferences/preferencesdialog.h"
 #endif
-#include "profilewidget2.h"
-#include "display.h"
+#include "profile-widget/profilewidget2.h"
+#include "core/display.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 
 #include <qgraphicssceneevent.h>
 
-#include "profile.h"
+#include "core/profile.h"
 
 RulerNodeItem2::RulerNodeItem2() :
 	entry(NULL),
@@ -81,20 +83,17 @@ RulerItem2::RulerItem2() : source(new RulerNodeItem2()),
 	textItemBack->setFlag(QGraphicsItem::ItemIgnoresTransformations);
 	setPen(QPen(QColor(Qt::black), 0.0));
 #ifndef SUBSURFACE_MOBILE
-	connect(PreferencesDialog::instance(), SIGNAL(settingsChanged()), this, SLOT(settingsChanged()));
+	connect(SettingsObjectWrapper::instance()->techDetails, &TechnicalDetailsSettings::rulerGraphChanged, this, &RulerItem2::settingsChanged);
 #endif
 }
 
-void RulerItem2::settingsChanged()
+void RulerItem2::settingsChanged(bool value)
 {
 	ProfileWidget2 *profWidget = NULL;
 	if (scene() && scene()->views().count())
 		profWidget = qobject_cast<ProfileWidget2 *>(scene()->views().first());
 
-	if (profWidget && profWidget->currentState == ProfileWidget2::PROFILE)
-		setVisible(prefs.rulergraph);
-	else
-		setVisible(false);
+	setVisible( (profWidget && profWidget->currentState == ProfileWidget2::PROFILE) ? value : false);
 }
 
 void RulerItem2::recalculate()
@@ -129,7 +128,7 @@ void RulerItem2::recalculate()
 	const qreal diff = begin.x() + textItem->boundingRect().width();
 	// clamp so that the text doesn't go out of the screen to the right
 	if (diff > view->width()) {
-		begin.setX(begin.x() - (diff - view->width()));
+		begin.setX(lrint(begin.x() - (diff - view->width())));
 		tgtX = mapFromScene(view->mapToScene(begin)).x();
 	}
 	// always show the text bellow the lowest of the start and end points

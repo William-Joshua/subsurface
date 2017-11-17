@@ -1,10 +1,11 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef NOTIFICATIONWIDGET_H
 #define NOTIFICATIONWIDGET_H
 
 #include <QWidget>
 #include <QFutureWatcher>
 
-#include <kmessagewidget.h>
+#include "desktop-widgets/kmessagewidget.h"
 
 namespace Ui {
 	class NotificationWidget;

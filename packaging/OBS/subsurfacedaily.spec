@@ -4,7 +4,10 @@
 # Copyright (c) 2014 Dirk Hohndel
 #
 
-%define latestVersion 4.4.1.363
+%define latestVersion 4.6.4.1031
+
+%define gitVersion 1031
+
 
 Name:           subsurfacedaily
 Version:	%latestVersion
@@ -31,6 +34,9 @@ BuildRequires:  kde4-filesystem
 BuildRequires:	libzip-devel
 BuildRequires:	libxml2-devel
 BuildRequires:	libxslt-devel
+BuildRequires:	libssh2-devel
+BuildRequires:	libcurl-devel
+BuildRequires:	grantlee5-devel
 %if  0%{?fedora_version} || 0%{?rhel_version} || 0%{?centos_version}
 BuildRequires:	netpbm-devel
 BuildRequires:	openssl-devel
@@ -47,6 +53,8 @@ BuildRequires:	qt5-qtbase-postgresql
 BuildRequires:	qt5-qtbase-ibase
 BuildRequires:	qt5-qtbase-odbc
 BuildRequires:	qt5-qtbase-tds
+BuildRequires:	qt5-qtconnectivity-devel
+BuildRequires:	qt5-qtlocation-devel
 %else
 BuildRequires:	update-desktop-files
 BuildRequires:	libopenssl-devel
@@ -61,6 +69,9 @@ BuildRequires:	libQt5WebKit5-devel
 BuildRequires:	libQt5WebKitWidgets-devel
 BuildRequires:	libqt5-qtscript-devel
 BuildRequires:	libqt5-qtdeclarative-devel
+BuildRequires:	libqt5-qtconnectivity-devel
+BuildRequires:	libqt5-qtlocation-devel
+BuildRequires:	libqt5-qtlocation-private-headers-devel
 %endif
 # Recommends Qt5 translations package
 %if 0%{?suse_version}
@@ -69,40 +80,58 @@ Recommends:     libqt5-qttranslations
 %if  0%{?fedora_version} >= 21
 Recommends:     qt5-qttranslations
 %endif
+# Recommends debug info (and debug sources, for openSUSE) for daily build
+%if %{name} == "subsurfacedaily"
+Recommends:     %{name}-debuginfo
+%if 0%{?suse_version}
+Recommends:     %{name}-debugsource
+%endif
+%endif
 BuildRoot:      %{_tmppath}/subsurface%{version}-build
 
 %description
-This is the official Subsurface build, including our own custom libdivecomputer and libssrfmarblewidget
+This is the official Subsurface test build, including our own custom libdivecomputer
 
 %prep
 %setup -q
 
 %build
-(cd libdivecomputer ; autoreconf --install ; ./configure --disable-shared ; make %{?_smp_mflags} )
-(cd libgit2; mkdir build; cd build; cmake -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_CLAR=OFF .. ; make )
-(mkdir marble-build ; cd marble-build ; \
-	cmake -DQTONLY=ON -DQT5BUILD=ON \
-		-DBUILD_MARBLE_APPS=OFF -DBUILD_MARBLE_EXAMPLES=OFF \
-		-DBUILD_MARBLE_TESTS=OFF -DBUILD_MARBLE_TOOLS=OFF \
-		-DBUILD_TESTING=OFF -DWITH_DESIGNER_PLUGIN=OFF \
-		-DBUILD_WITH_DBUS=OFF ../marble-source ; \
+mkdir -p install-root
+(cd libdivecomputer ; \
+	autoreconf --install ; \
+	./configure --prefix=$RPM_BUILD_DIR/install-root --disable-shared --disable-examples ; \
 	make %{?_smp_mflags} ; \
-	ln -s src/lib/marble lib ; \
-	mkdir include ; cd include ; for i in `find ../../marble-source -name \*.h` ; do ln -s -f $i . ; done ; \
-	ln -s -f . marble )
+	make install)
+(cd libgit2; mkdir build; cd build; \
+	cmake -DCMAKE_INSTALL_PREFIX=$RPM_BUILD_DIR/install-root -DBUILD_SHARED_LIBS=OFF -DCMAKE_BUILD_TYPE=Release -DBUILD_CLAR=OFF \
+    	-DCMAKE_C_FLAGS:STRING="%optflags" \
+		-DCMAKE_CXX_FLAGS:STRING="%optflags" \
+        .. ; \
+	make %{?_smp_mflags} ; \
+	make install)
+( cd googlemaps ; mkdir -p build ; cd build ; \
+	qmake-qt5 "INCLUDEPATH=$INSTALL_ROOT/include" ../googlemaps.pro ; \
+	make -j4 )
 (mkdir subsurface-build ; cd subsurface-build ; \
 	cmake -DCMAKE_BUILD_TYPE=Release \
-		-DLIBDCDEVEL=$(pwd)/../libdivecomputer -DLIBDCSTATIC=1 \
-		-DLIBGIT2DEVEL=$(pwd)/../libgit2 -DLIBGIT2STATIC=1 \
-		-DLIBMARBLEDEVEL=$(pwd)/../marble-build \
 		-DLRELEASE=lrelease-qt5 \
 		-DCMAKE_INSTALL_PREFIX=%{buildroot}/usr \
-		$(pwd)/.. ; \
+		-DLIBDIVECOMPUTER_INCLUDE_DIR=$RPM_BUILD_DIR/install-root/include \
+		-DLIBGIT2_INCLUDE_DIR=$RPM_BUILD_DIR/install-root/include \
+		-DLIBDIVECOMPUTER_LIBRARIES=$RPM_BUILD_DIR/install-root/lib/libdivecomputer.a \
+		-DLIBGIT2_LIBRARIES=$RPM_BUILD_DIR/install-root/lib/libgit2.a \
+		-DUSE_LIBGIT23_API=ON \
+		-DCMAKE_C_FLAGS:STRING="%optflags" \
+		-DCMAKE_CXX_FLAGS:STRING="%optflags" \
+		-DNO_PRINTING=OFF \
+		.. ; \
 	make VERBOSE=1 %{?_smp_mflags} subsurface)
 
 %install
 mkdir -p %{buildroot}/%{_libdir}
+(cd googlemaps/build ; make install_target INSTALL_ROOT=$RPM_BUILD_ROOT )
 (cd subsurface-build ; make VERBOSE=1 install )
+install subsurface.debug %{buildroot}%{_bindir}
 %if 0%{?fedora_version} || 0%{?rhel_version} || 0%{?centos_version}
 desktop-file-install --dir=%{buildroot}/%{_datadir}/applications subsurface.desktop
 %else
@@ -120,12 +149,12 @@ desktop-file-install --dir=%{buildroot}/%{_datadir}/applications subsurface.desk
 
 %files
 %defattr(-,root,root)
-%doc gpl-2.0.txt README ReleaseNotes/ReleaseNotes.txt
-%{_bindir}/subsurface
+%doc gpl-2.0.txt README.md ReleaseNotes/ReleaseNotes.txt
+%{_bindir}/subsurface*
+%{_libdir}/qt5/plugins/geoservices/libqtgeoservices_googlemaps.so
 %{_datadir}/applications/subsurface.desktop
 %{_datadir}/icons/hicolor/*/apps/subsurface-icon.*
 %{_datadir}/subsurface/
-/usr/lib*/libssrfmarblewidget.so*
 
 %changelog
 

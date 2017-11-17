@@ -1,14 +1,15 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * divelistview.cpp
  *
  * classes for the divelist of Subsurface
  *
  */
-#include "filtermodels.h"
-#include "modeldelegates.h"
-#include "mainwindow.h"
-#include "divepicturewidget.h"
-#include "display.h"
+#include "qt-models/filtermodels.h"
+#include "desktop-widgets/modeldelegates.h"
+#include "desktop-widgets/mainwindow.h"
+#include "desktop-widgets/divepicturewidget.h"
+#include "core/display.h"
 #include <unistd.h>
 #include <QSettings>
 #include <QKeyEvent>
@@ -17,15 +18,12 @@
 #include <QNetworkReply>
 #include <QStandardPaths>
 #include <QMessageBox>
-#include "qthelper.h"
-#include "undocommands.h"
-#include "divelistview.h"
-#include "divepicturemodel.h"
-#include "metrics.h"
-#include "helpers.h"
-
-//                                #  Date  Rtg Dpth  Dur  Tmp Wght Suit  Cyl  Gas  SAC  OTU  CNS  Loc
-static int defaultWidth[] =    {  70, 140, 90,  50,  50,  50,  50,  70,  50,  50,  70,  50,  50, 500};
+#include "core/qthelper.h"
+#include "desktop-widgets/undocommands.h"
+#include "desktop-widgets/divelistview.h"
+#include "qt-models/divepicturemodel.h"
+#include "core/metrics.h"
+#include "core/helpers.h"
 
 DiveListView::DiveListView(QWidget *parent) : QTreeView(parent), mouseClickSelection(false), sortColumn(0),
 	currentOrder(Qt::DescendingOrder), dontEmitDiveChangedSignal(false), selectionSaved(false)
@@ -57,7 +55,7 @@ DiveListView::DiveListView(QWidget *parent) : QTreeView(parent), mouseClickSelec
 
 	// TODO FIXME we need this to get the header names
 	// can we find a smarter way?
-	DiveTripModel *tripModel = new DiveTripModel(this);
+	tripModel = new DiveTripModel(this);
 
 	// set the default width as a minimum between the hard-coded defaults,
 	// the header text width and the (assumed) content width, calculated
@@ -81,6 +79,9 @@ DiveListView::DiveListView(QWidget *parent) : QTreeView(parent), mouseClickSelec
 		case DiveTripModel::SAC:
 			sw = 7*em;
 			break;
+		case DiveTripModel::PHOTOS:
+			sw = 5*em;
+			break;
 		case DiveTripModel::LOCATION:
 			sw = 50*em;
 			break;
@@ -90,8 +91,8 @@ DiveListView::DiveListView(QWidget *parent) : QTreeView(parent), mouseClickSelec
 		if (sw > width)
 			width = sw;
 		width += zw; // small padding
-		if (width > defaultWidth[col])
-			defaultWidth[col] = width;
+		if (width > tripModel->columnWidth(col))
+			tripModel->setColumnWidth(col, width);
 	}
 	delete tripModel;
 
@@ -110,7 +111,7 @@ DiveListView::~DiveListView()
 		if (isColumnHidden(i))
 			continue;
 		// we used to hardcode them all to 100 - so that might still be in the settings
-		if (columnWidth(i) == 100 || columnWidth(i) == defaultWidth[i])
+		if (columnWidth(i) == 100 || columnWidth(i) == tripModel->columnWidth(i))
 			settings.remove(QString("colwidth%1").arg(i));
 		else
 			settings.setValue(QString("colwidth%1").arg(i), columnWidth(i));
@@ -136,7 +137,7 @@ void DiveListView::setupUi()
 		if (width.isValid())
 			setColumnWidth(i, width.toInt());
 		else
-			setColumnWidth(i, defaultWidth[i]);
+			setColumnWidth(i, tripModel->columnWidth(i));
 	}
 	settings.endGroup();
 	if (firstRun)
@@ -426,7 +427,7 @@ void DiveListView::reload(DiveTripModel::Layout layout, bool forceSort)
 	if (oldModel) {
 		oldModel->deleteLater();
 	}
-	DiveTripModel *tripModel = new DiveTripModel(this);
+	tripModel = new DiveTripModel(this);
 	tripModel->setLayout(layout);
 
 	m->setSourceModel(tripModel);
@@ -515,6 +516,7 @@ void DiveListView::toggleColumnVisibilityByIndex()
 
 void DiveListView::currentChanged(const QModelIndex &current, const QModelIndex &previous)
 {
+	Q_UNUSED(previous)
 	if (!isVisible())
 		return;
 	if (!current.isValid())
@@ -579,8 +581,8 @@ static bool can_merge(const struct dive *a, const struct dive *b, enum asked_use
 	if (dive_endtime(a) + 30 * 60 < b->when) {
 		if (*have_asked == NOTYET) {
 			if (QMessageBox::warning(MainWindow::instance(),
-						 MainWindow::instance()->tr("Warning"),
-						 MainWindow::instance()->tr("Trying to merge dives with %1min interval in between").arg(
+						 MainWindow::tr("Warning"),
+						 MainWindow::tr("Trying to merge dives with %1min interval in between").arg(
 							 (b->when - dive_endtime(a)) / 60),
 					     QMessageBox::Ok | QMessageBox::Cancel) == QMessageBox::Cancel) {
 				*have_asked = DONTMERGE;
@@ -716,11 +718,20 @@ void DiveListView::addToTripAbove()
 
 void DiveListView::addToTrip(int delta)
 {
-	// if there is a trip above / below, then it's a sibling at the same
-	// level as this dive. So let's take a look
+	// d points to the row that has (mouse-)pointer focus, and there are nr rows selected
 	struct dive *d = (struct dive *)contextMenuIndex.data(DiveTripModel::DIVE_ROLE).value<void *>();
-	QModelIndex t = contextMenuIndex.sibling(contextMenuIndex.row() + delta, 0);
-	dive_trip_t *trip = (dive_trip_t *)t.data(DiveTripModel::TRIP_ROLE).value<void *>();
+	int nr = selectionModel()->selectedRows().count();
+	QModelIndex t;
+	dive_trip_t *trip = NULL;
+
+	// now look for the trip to add to, for this, loop over the selected dives and
+	// check if its sibling is a trip.
+	for (int i = 1; i <= nr; i++) {
+		t = contextMenuIndex.sibling(contextMenuIndex.row() + (delta > 0 ? i: i * -1), 0);
+		trip = (dive_trip_t *)t.data(DiveTripModel::TRIP_ROLE).value<void *>();
+		if (trip)
+			break;
+	}
 
 	if (!trip || !d)
 		// no dive, no trip? get me out of here
@@ -890,7 +901,7 @@ void DiveListView::contextMenuEvent(QContextMenuEvent *event)
 		popup.addAction(tr("Shift dive times"), this, SLOT(shiftTimes()));
 		popup.addAction(tr("Split selected dives"), this, SLOT(splitDives()));
 		popup.addAction(tr("Load image(s) from file(s)"), this, SLOT(loadImages()));
-		popup.addAction(tr("Load image(s) from web"), this, SLOT(loadWebImages()));
+		popup.addAction(tr("Load image from web"), this, SLOT(loadWebImages()));
 	}
 
 	// "collapse all" really closes all trips,
@@ -905,7 +916,6 @@ void DiveListView::contextMenuEvent(QContextMenuEvent *event)
 	event->accept();
 }
 
-
 void DiveListView::shiftTimes()
 {
 	ShiftTimesDialog::instance()->show();
@@ -913,7 +923,12 @@ void DiveListView::shiftTimes()
 
 void DiveListView::loadImages()
 {
-	QStringList fileNames = QFileDialog::getOpenFileNames(this, tr("Open image files"), lastUsedImageDir(), tr("Image files (*.jpg *.jpeg *.pnm *.tif *.tiff)"));
+	QStringList filters = imageExtensionFilters();
+	QStringList fileNames = QFileDialog::getOpenFileNames(this,
+							      tr("Open image files"),
+							      lastUsedImageDir(),
+							      tr("Image files (%1)").arg(filters.join(" ")));
+
 	if (fileNames.isEmpty())
 		return;
 	updateLastUsedImageDir(QFileInfo(fileNames[0]).dir().path());
@@ -949,7 +964,6 @@ void DiveListView::loadWebImages()
 	if (!urlDialog.exec())
 		return;
 	loadImageFromURL(QUrl::fromUserInput(urlDialog.url()));
-
 }
 
 void DiveListView::loadImageFromURL(QUrl url)
@@ -966,10 +980,12 @@ void DiveListView::loadImageFromURL(QUrl url)
 
 		QImage image = QImage();
 		image.loadFromData(imageData);
-		if (image.isNull())
+		if (image.isNull()) {
 			// If this is not an image, maybe it's an html file and Miika can provide some xslr magic to extract images.
 			// In this case we would call the function recursively on the list of image source urls;
+			report_error(qPrintable(tr("%1 does not appear to be an image").arg(url.toString())));
 			return;
+		}
 
 		// Since we already downloaded the image we can cache it as well.
 		QCryptographicHash hash(QCryptographicHash::Sha1);
@@ -992,10 +1008,7 @@ void DiveListView::loadImageFromURL(QUrl url)
 			matchImagesToDives(QStringList(url.toString()));
 		}
 	}
-
-
 }
-
 
 QString DiveListView::lastUsedImageDir()
 {
@@ -1032,4 +1045,10 @@ void DiveListView::updateLastImageTimeOffset(const int offset)
 	QSettings s;
 	s.beginGroup("MainWindow");
 	s.setValue("LastImageTimeOffset", offset);
+}
+
+void DiveListView::mouseDoubleClickEvent(QMouseEvent * event)
+{
+	(void) event;
+	return;
 }

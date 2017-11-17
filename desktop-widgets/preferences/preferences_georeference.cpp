@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "preferences_georeference.h"
 #include "ui_prefs_georeference.h"
-#include "prefs-macros.h"
-#include "qthelper.h"
+#include "core/prefs-macros.h"
+#include "core/qthelper.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 #include "qt-models/divelocationmodel.h"
 
 #include <ctime>
-#include <QSettings>
 
 PreferencesGeoreference::PreferencesGeoreference() : AbstractPreferencesWidget(tr("Georeference"), QIcon(":/georeference"), 9)
 {
@@ -23,9 +24,6 @@ PreferencesGeoreference::~PreferencesGeoreference()
 
 void PreferencesGeoreference::refreshSettings()
 {
-	ui->enable_geocoding->setChecked(prefs.geocoding.enable_geocoding);
-	ui->parse_without_gps->setChecked(prefs.geocoding.parse_dive_without_gps);
-	ui->tag_existing_dives->setChecked(prefs.geocoding.tag_existing_dives);
 	ui->first_item->setCurrentIndex(prefs.geocoding.category[0]);
 	ui->second_item->setCurrentIndex(prefs.geocoding.category[1]);
 	ui->third_item->setCurrentIndex(prefs.geocoding.category[2]);
@@ -33,13 +31,8 @@ void PreferencesGeoreference::refreshSettings()
 
 void PreferencesGeoreference::syncSettings()
 {
-	QSettings s;
-	s.beginGroup("geocoding");
-	s.setValue("enable_geocoding", ui->enable_geocoding->isChecked());
-	s.setValue("parse_dives_without_gps", ui->parse_without_gps->isChecked());
-	s.setValue("tag_existing_dives", ui->tag_existing_dives->isChecked());
-	s.setValue("cat0", ui->first_item->currentIndex());
-	s.setValue("cat1", ui->second_item->currentIndex());
-	s.setValue("cat2", ui->third_item->currentIndex());
-	s.endGroup();
+	auto geocoding = SettingsObjectWrapper::instance()->geocoding;
+	geocoding->setFirstTaxonomyCategory((taxonomy_category) ui->first_item->currentIndex());
+	geocoding->setSecondTaxonomyCategory((taxonomy_category) ui->second_item->currentIndex());
+	geocoding->setThirdTaxonomyCategory((taxonomy_category) ui->third_item->currentIndex());
 }

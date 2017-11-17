@@ -1,5 +1,6 @@
-#include "tableview.h"
-#include "modeldelegates.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/tableview.h"
+#include "desktop-widgets/modeldelegates.h"
 
 #include <QPushButton>
 #include <QSettings>
@@ -67,13 +68,13 @@ TableView::~TableView()
 	s.beginGroup(objectName());
 	// remove the old default
 	bool oldDefault = (ui.tableView->columnWidth(0) == 30);
-	for (int i = 1; oldDefault && i < ui.tableView->model()->columnCount(); i++) {
+	for (int i = 1; oldDefault && ui.tableView->model() && i < ui.tableView->model()->columnCount(); i++) {
 		if (ui.tableView->columnWidth(i) != 80)
 			oldDefault = false;
 	}
 	if (oldDefault) {
 		s.remove("");
-	} else {
+	} else if (ui.tableView->model()) {
 		for (int i = 0; i < ui.tableView->model()->columnCount(); i++) {
 			if (ui.tableView->columnWidth(i) == defaultColumnWidth(i))
 				s.remove(QString("colwidth%1").arg(i));
@@ -135,8 +136,13 @@ void TableView::edit(const QModelIndex &index)
 
 int TableView::defaultColumnWidth(int col)
 {
+	int width;
 	QString text = ui.tableView->model()->headerData(col, Qt::Horizontal).toString();
-	return text.isEmpty() ? metrics.rm_col_width : defaultModelFontMetrics().width(text) + 4; // add small margin
+	width = text.isEmpty() ? metrics.rm_col_width : defaultModelFontMetrics().width(text) + 4; // add small margin
+#if defined(Q_OS_MAC)
+	width += 10; // Mac needs more margin
+#endif
+	return width;
 }
 
 QTableView *TableView::view()

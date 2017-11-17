@@ -1,5 +1,6 @@
-#include "statisticswidget.h"
-#include "yearlystatisticsmodel.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/statistics/statisticswidget.h"
+#include "qt-models/yearlystatisticsmodel.h"
 #include <QModelIndex>
 
 YearlyStatisticsWidget::YearlyStatisticsWidget(QWidget *parent):
@@ -23,6 +24,9 @@ void YearlyStatisticsWidget::setModel(YearlyStatisticsModel *m)
 
 void YearlyStatisticsWidget::modelRowsInserted(const QModelIndex &index, int first, int last)
 {
+	Q_UNUSED(index)
+	Q_UNUSED(first)
+	Q_UNUSED(last)
 	// stub
 }
 

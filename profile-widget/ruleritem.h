@@ -1,11 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef RULERITEM_H
 #define RULERITEM_H
 
 #include <QObject>
 #include <QGraphicsEllipseItem>
 #include <QGraphicsObject>
-#include "divecartesianaxis.h"
-#include "display.h"
+#include "profile-widget/divecartesianaxis.h"
+#include "core/display.h"
 
 struct plot_data;
 class RulerItem2;
@@ -44,7 +45,7 @@ public:
 
 public
 slots:
-	void settingsChanged();
+	void settingsChanged(bool toggled);
 
 private:
 	struct plot_info pInfo;

@@ -26,7 +26,7 @@ O₂%, He%	 The fraction of Oxygen and Helium in a gas.
 		 of the gas times the fraction of the specific
 		 component. E.g. a gas with O₂% = 30 (also called
 		 30% Nitrox or EAN30) at 30m depth (where the
-		 pressure is 4atm) therefore has a PO₂ of
+		 pressure is 4atm) therefore has a pO₂ of
 		 4 * 0.30 = 1.2
 
 Trimix		 Gas Mixture containing Helium, Oxygen and Nitrogen.
@@ -53,8 +53,12 @@ StartPress	 Starting Pressure - at the beginning of a dive
 
 EndPress	 Ending Pressure - at the end of a dive
 
-Switch at	 the depth at which the diver wants to switch to
-		 a certain gas
+Deco MOD	 The Maximum Operating Depth for a decompression gas,
+		 which is the depth at which the diver wants to switch
+		 to a decompression gas
+
+Bot. MOD	 The Maximum Operating Depth for a gas used in the bottom
+		 phase of a dive
 
 Device ID	 Unique ID for a specific dive computer
 
@@ -76,7 +80,7 @@ CC		 Closed circuit - short for "rebreather diving"
 
 OC		 Open circuit - traditional scuba
 
-CC Set Point	 Rebreathers often are run with a fixed PO₂ - the "set point"
+CC Setpoint	 Rebreathers often are run with a fixed pO₂ - the "setpoint"
 
 Bailing out to OC
 		 in a rebreather dive the dive switches to their emergency
@@ -100,7 +104,7 @@ clip-on
 
 rbt		 remaining bottom time
 
-rgt		 remainint gas time
+rgt		 remaining gas time
 
 workload	 is this a strenous dive?
 

@@ -1,14 +1,14 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * models.cpp
  *
  * classes for the equipment models of Subsurface
  *
  */
-#include "models.h"
-#include "helpers.h"
+#include "qt-models/models.h"
+#include "core/helpers.h"
 
 #include <QLocale>
-#include <QSettings>
 
 // initialize the trash icon if necessary
 
@@ -26,6 +26,7 @@ const QPixmap &trashForbiddenIcon()
 
 Qt::ItemFlags GasSelectionModel::flags(const QModelIndex &index) const
 {
+	Q_UNUSED(index);
 	return Qt::ItemIsEnabled | Qt::ItemIsSelectable;
 }
 
@@ -66,7 +67,6 @@ LanguageModel *LanguageModel::instance()
 
 LanguageModel::LanguageModel(QObject *parent) : QAbstractListModel(parent)
 {
-	QSettings s;
 	QDir d(getSubsurfaceDataPath("translations"));
 	Q_FOREACH (const QString &s, d.entryList()) {
 		if (s.startsWith("subsurface_") && s.endsWith(".qm")) {
@@ -83,16 +83,17 @@ QVariant LanguageModel::data(const QModelIndex &index, int role) const
 		return QVariant();
 	switch (role) {
 	case Qt::DisplayRole: {
-		QLocale l(currentString.remove("subsurface_"));
+		QLocale l(currentString.remove("subsurface_").remove(".qm"));
 		return currentString == "English" ? currentString : QString("%1 (%2)").arg(l.languageToString(l.language())).arg(l.countryToString(l.country()));
 	}
 	case Qt::UserRole:
-		return currentString == "English" ? "en_US" : currentString.remove("subsurface_");
+		return currentString == "English" ? "en_US" : currentString.remove("subsurface_").remove(".qm");
 	}
 	return QVariant();
 }
 
 int LanguageModel::rowCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return languages.count();
 }

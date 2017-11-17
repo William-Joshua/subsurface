@@ -1,7 +1,13 @@
-#include "filtermodels.h"
-#include "models.h"
-#include "display.h"
-#include "divetripmodel.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "qt-models/filtermodels.h"
+#include "qt-models/models.h"
+#include "core/display.h"
+#include "qt-models/divetripmodel.h"
+
+#if !defined(SUBSURFACE_MOBILE)
+#include "desktop-widgets/divelistview.h"
+#include "desktop-widgets/mainwindow.h"
+#endif
 
 #include <QDebug>
 
@@ -78,6 +84,9 @@ SuitsFilterModel::SuitsFilterModel(QObject *parent) : QStringListModel(parent)
 
 bool SuitsFilterModel::doFilter(dive *d, QModelIndex &index0, QAbstractItemModel *sourceModel) const
 {
+	Q_UNUSED(index0);
+	Q_UNUSED(sourceModel);
+
 	if (!anyChecked) {
 		return true;
 	}
@@ -153,6 +162,9 @@ void TagFilterModel::repopulate()
 
 bool TagFilterModel::doFilter(dive *d, QModelIndex &index0, QAbstractItemModel *sourceModel) const
 {
+	Q_UNUSED(index0);
+	Q_UNUSED(sourceModel);
+
 	// If there's nothing checked, this should show everything
 	if (!anyChecked) {
 		return true;
@@ -188,6 +200,9 @@ BuddyFilterModel::BuddyFilterModel(QObject *parent) : QStringListModel(parent)
 
 bool BuddyFilterModel::doFilter(dive *d, QModelIndex &index0, QAbstractItemModel *sourceModel) const
 {
+	Q_UNUSED(index0);
+	Q_UNUSED(sourceModel);
+
 	// If there's nothing checked, this should show everything
 	if (!anyChecked) {
 		return true;
@@ -246,6 +261,9 @@ LocationFilterModel::LocationFilterModel(QObject *parent) : QStringListModel(par
 
 bool LocationFilterModel::doFilter(struct dive *d, QModelIndex &index0, QAbstractItemModel *sourceModel) const
 {
+	Q_UNUSED(index0);
+	Q_UNUSED(sourceModel);
+
 	if (!anyChecked) {
 		return true;
 	}
@@ -297,7 +315,7 @@ MultiFilterSortModel::MultiFilterSortModel(QObject *parent) :
 	QSortFilterProxyModel(parent),
 	divesDisplayed(0),
 	justCleared(false),
-	curr_dive_site(NULL)	
+	curr_dive_site(NULL)
 {
 }
 
@@ -356,16 +374,10 @@ bool MultiFilterSortModel::filterAcceptsRow(int source_row, const QModelIndex &s
 
 void MultiFilterSortModel::myInvalidate()
 {
-	//WARNING:
-	//TODO:
-	// THIS CODE BELOW IS COMPLETELY BROKEN. I KNOW, I WROTE IT.
-	// REMOVE THIS, MAKE IT SANE.
-	// GRRRRR.
-
-#if 0
+#if !defined(SUBSURFACE_MOBILE)
 	int i;
 	struct dive *d;
-	// DiveListView *dlv = MainWindow::instance()->dive_list();
+	DiveListView *dlv = MainWindow::instance()->dive_list();
 
 	divesDisplayed = 0;
 

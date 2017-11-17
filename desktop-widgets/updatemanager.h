@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef UPDATEMANAGER_H
 #define UPDATEMANAGER_H
 
@@ -11,7 +12,6 @@ class UpdateManager : public QObject {
 public:
 	explicit UpdateManager(QObject *parent = 0);
 	void checkForUpdates(bool automatic = false);
-	static QString getUUID();
 
 public
 slots:

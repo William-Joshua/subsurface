@@ -1,9 +1,11 @@
-#include "diveshareexportdialog.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/diveshareexportdialog.h"
 #include "ui_diveshareexportdialog.h"
-#include "mainwindow.h"
-#include "save-html.h"
-#include "subsurfacewebservices.h"
-#include "helpers.h"
+#include "desktop-widgets/mainwindow.h"
+#include "core/save-html.h"
+#include "desktop-widgets/subsurfacewebservices.h"
+#include "core/helpers.h"
+#include "core/cloudstorage.h"
 
 #include <QDesktopServices>
 #include <QSettings>
@@ -118,7 +120,7 @@ void DiveShareExportDialog::doUpload()
 	ui->progressBar->setRange(0, 0);
 
 	//generate json
-	struct membuffer buf = { 0 };
+	struct membuffer buf = {};
 	export_list(&buf, NULL, exportSelected, false);
 	QByteArray json_data(buf.buffer, buf.len);
 	free_buffer(&buf);
@@ -135,7 +137,7 @@ void DiveShareExportDialog::doUpload()
 	if (ui->txtUID->text().length() != 0)
 		request.setRawHeader("X-UID", ui->txtUID->text().toUtf8());
 
-	reply = WebServices::manager()->put(request, json_data);
+	reply = manager()->put(request, json_data);
 
 	QObject::connect(reply, SIGNAL(finished()), this, SLOT(finishedSlot()));
 }

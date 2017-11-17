@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "printoptions.h"
 #include "templateedit.h"
-#include "helpers.h"
+#include "core/helpers.h"
 
 #include <QDebug>
 #include <QFileDialog>
@@ -34,10 +35,8 @@ void PrintOptions::setup()
 	setupTemplates();
 
 	// general print option checkboxes
-	if (printOptions->color_selected)
-		ui.printInColor->setChecked(true);
-	if (printOptions->print_selected)
-		ui.printSelected->setChecked(true);
+	ui.printInColor->setChecked(printOptions->color_selected);
+	ui.printSelected->setChecked(printOptions->print_selected);
 
 	// connect slots only once
 	if (hasSetupSlots)
@@ -51,39 +50,21 @@ void PrintOptions::setup()
 
 void PrintOptions::setupTemplates()
 {
-	if (printOptions->type == print_options::DIVELIST) {
-		// insert dive list templates in the UI and select the current template
-		qSort(grantlee_templates);
-		int current_index = 0, index = 0;
-		for (QList<QString>::iterator i = grantlee_templates.begin(); i != grantlee_templates.end(); ++i) {
-			if ((*i).compare(printOptions->p_template) == 0) {
-				current_index = index;
-				break;
-			}
-			index++;
-		}
-		ui.printTemplate->clear();
-		for (QList<QString>::iterator i = grantlee_templates.begin(); i != grantlee_templates.end(); ++i) {
-			ui.printTemplate->addItem((*i).split('.')[0], QVariant::fromValue(*i));
-		}
-		ui.printTemplate->setCurrentIndex(current_index);
-	} else if (printOptions->type == print_options::STATISTICS) {
-		// insert statistics templates in the UI and select the current template
-		qSort(grantlee_statistics_templates);
-		int current_index = 0, index = 0;
-		for (QList<QString>::iterator i = grantlee_statistics_templates.begin(); i != grantlee_statistics_templates.end(); ++i) {
-			if ((*i).compare(printOptions->p_template) == 0) {
-				current_index = index;
-				break;
-			}
-			index++;
-		}
-		ui.printTemplate->clear();
-		for (QList<QString>::iterator i = grantlee_statistics_templates.begin(); i != grantlee_statistics_templates.end(); ++i) {
-			ui.printTemplate->addItem((*i).split('.')[0], QVariant::fromValue(*i));
-		}
-		ui.printTemplate->setCurrentIndex(current_index);
+	QStringList currList = printOptions->type == print_options::DIVELIST ?
+		grantlee_templates : grantlee_statistics_templates;
+
+	// temp. store the template from options, as addItem() updates it via:
+	// on_printTemplate_currentIndexChanged()
+	QString storedTemplate = printOptions->p_template;
+	qSort(currList);
+	int current_index = 0;
+	ui.printTemplate->clear();
+	Q_FOREACH(const QString& theme, currList) {
+		if (theme == storedTemplate) // find the stored template in the list
+			current_index = currList.indexOf(theme);
+		ui.printTemplate->addItem(theme.split('.')[0], theme);
 	}
+	ui.printTemplate->setCurrentIndex(current_index);
 }
 
 // print type radio buttons
@@ -148,7 +129,7 @@ void PrintOptions::on_editButton_clicked()
 void PrintOptions::on_importButton_clicked()
 {
 	QString filename = QFileDialog::getOpenFileName(this, tr("Import template file"), "",
-							tr("HTML files (*.html)"));
+							tr("HTML files") + " (*.html)");
 	if (filename.isEmpty())
 		return;
 	QFileInfo fileInfo(filename);
@@ -161,7 +142,7 @@ void PrintOptions::on_importButton_clicked()
 void PrintOptions::on_exportButton_clicked()
 {
 	QString filename = QFileDialog::getSaveFileName(this, tr("Export template files as"), "",
-							tr("HTML files (*.html)"));
+							tr("HTML files") + " (*.html)");
 	if (filename.isEmpty())
 		return;
 	QFile::copy(getPrintingTemplatePathUser() + QDir::separator() + getSelectedTemplate(), filename);

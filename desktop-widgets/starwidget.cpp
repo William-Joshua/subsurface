@@ -1,8 +1,9 @@
-#include "starwidget.h"
-#include "metrics.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/starwidget.h"
+#include "core/metrics.h"
 #include <QSvgRenderer>
 #include <QMouseEvent>
-#include "simplewidgets.h"
+#include "desktop-widgets/simplewidgets.h"
 
 QImage StarWidget::activeStar;
 QImage StarWidget::inactiveStar;
@@ -62,6 +63,7 @@ void StarWidget::mouseReleaseEvent(QMouseEvent *event)
 
 void StarWidget::paintEvent(QPaintEvent *event)
 {
+	Q_UNUSED(event)
 	QPainter p(this);
 	QImage star = hasFocus() ? focusedImage(starActive()) : starActive();
 	QPixmap selected = QPixmap::fromImage(star);

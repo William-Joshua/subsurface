@@ -1,14 +1,18 @@
-#include "subsurfacewebservices.h"
-#include "helpers.h"
-#include "webservice.h"
-#include "mainwindow.h"
-#include "usersurvey.h"
-#include "divelist.h"
-#include "globe.h"
-#include "maintab.h"
-#include "display.h"
-#include "membuffer.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "desktop-widgets/subsurfacewebservices.h"
+#include "core/helpers.h"
+#include "core/webservice.h"
+#include "desktop-widgets/mainwindow.h"
+#include "desktop-widgets/usersurvey.h"
+#include "core/divelist.h"
+#include "desktop-widgets/mapwidget.h"
+#include "desktop-widgets/tab-widgets/maintab.h"
+#include "core/display.h"
+#include "core/membuffer.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 #include <errno.h>
+#include "core/cloudstorage.h"
+#include "core/dive.h"
 
 #include <QDir>
 #include <QHttpMultiPart>
@@ -67,7 +71,7 @@ static bool merge_locations_into_dives(void)
 						qDebug() << "processing gpsfix @" << get_dive_date_string(gpsfix->when) <<
 							    "which is withing six hours of dive from" <<
 							    get_dive_date_string(dive->when) << "until" <<
-							    get_dive_date_string(dive->when + dive->duration.seconds);
+							    get_dive_date_string(dive_endtime(dive));
 					/*
 					 * If position is fixed during dive. This is the good one.
 					 * Asign and mark position, and end gps_location loop
@@ -103,7 +107,7 @@ static bool merge_locations_into_dives(void)
 								if (verbose)
 									qDebug() << "which is closer to the start of the dive, do continue with that";
 								continue;
-							} else if (gpsfix->when > dive->when + dive->duration.seconds) {
+							} else if (gpsfix->when > dive_endtime(dive)) {
 								if (verbose)
 									qDebug() << "which is even later after the end of the dive, so pick the previous one";
 								copy_gps_location(gpsfix, dive);
@@ -112,7 +116,7 @@ static bool merge_locations_into_dives(void)
 								break;
 							} else {
 								/* ok, gpsfix is before, nextgpsfix is after */
-								if (dive->when - gpsfix->when <= nextgpsfix->when - (dive->when + dive->duration.seconds)) {
+								if (dive->when - gpsfix->when <= nextgpsfix->when - dive_endtime(dive)) {
 									if (verbose)
 										qDebug() << "pick the one before as it's closer to the start";
 									copy_gps_location(gpsfix, dive);
@@ -144,7 +148,7 @@ static bool merge_locations_into_dives(void)
 					/* If position is out of SAME_GROUP range and in the future, mark position for
 					 * next dive iteration and end the gps_location loop
 					 */
-					if (gpsfix->when >= dive->when + dive->duration.seconds + SAME_GROUP) {
+					if (gpsfix->when >= dive_endtime(dive) + SAME_GROUP) {
 						tracer = j;
 						break;
 					}
@@ -193,7 +197,7 @@ bool DivelogsDeWebServices::prepare_dives_for_divelogs(const QString &tempfile, 
 		const char *membuf;
 		xmlDoc *transformed;
 		struct zip_source *s;
-		struct membuffer mb = { 0 };
+		struct membuffer mb = {};
 
 		/*
 		 * Get the i'th dive in XML format so we can process it.
@@ -214,7 +218,19 @@ bool DivelogsDeWebServices::prepare_dives_for_divelogs(const QString &tempfile, 
 				put_degrees(&mb, ds->latitude, " gps='", " ");
 				put_degrees(&mb, ds->longitude, "", "'");
 			}
-			put_format(&mb, "/>\n</divesites>\n");
+			put_format(&mb, ">\n");
+			if (ds->taxonomy.nr) {
+				for (int j = 0; j < ds->taxonomy.nr; j++) {
+					struct taxonomy *t = &ds->taxonomy.category[j];
+					if (t->category != TC_NONE && t->category == prefs.geocoding.category[j] && t->value) {
+						put_format(&mb, "  <geo cat='%d'", t->category);
+						put_format(&mb, " origin='%d' value='", t->origin);
+						put_quoted(&mb, t->value, 1, 0);
+						put_format(&mb, "'/>\n");
+					}
+				}
+			}
+			put_format(&mb, "</site>\n</divesites>\n");
 		}
 
 		save_one_dive_to_mb(&mb, dive);
@@ -312,12 +328,6 @@ void WebServices::hideDownload()
 	ui.upload->show();
 }
 
-QNetworkAccessManager *WebServices::manager()
-{
-	static QNetworkAccessManager *manager = new QNetworkAccessManager(qApp);
-	return manager;
-}
-
 void WebServices::downloadTimedOut()
 {
 	if (!reply)
@@ -384,11 +394,17 @@ void WebServices::resetState()
 
 SubsurfaceWebServices::SubsurfaceWebServices(QWidget *parent, Qt::WindowFlags f) : WebServices(parent, f)
 {
-	QSettings s;
-	if (!prefs.save_userid_local || !*prefs.userid)
-		ui.userID->setText(s.value("subsurface_webservice_uid").toString().toUpper());
-	else
-		ui.userID->setText(prefs.userid);
+	// figure out if we know (or can determine) the user's web service userid
+	QString userid(prefs.userid);
+
+	if (userid.isEmpty() &&
+	    !same_string(prefs.cloud_storage_email, "") &&
+	    !same_string(prefs.cloud_storage_password, "") &&
+	    GpsLocation::hasInstance())
+		userid = GpsLocation::instance()->getUserid(prefs.cloud_storage_email, prefs.cloud_storage_password);
+
+	ui.userID->setText(userid);
+
 	hidePassword();
 	hideUpload();
 	ui.progressBar->setFormat(tr("Enter User ID and click Download"));
@@ -433,7 +449,9 @@ void SubsurfaceWebServices::buttonClicked(QAbstractButton *button)
 		QSettings s;
 		QString qDialogUid = ui.userID->text().toUpper();
 		bool qSaveUid = ui.saveUidLocal->checkState();
-		set_save_userid_local(qSaveUid);
+		SettingsObjectWrapper::instance()->cloud_storage->setSaveUserIdLocal(qSaveUid);
+
+		//WARN: Dirk, this seems to be wrong, I coundn't really understand the code.
 		if (qSaveUid) {
 			QString qSettingUid = s.value("subsurface_webservice_uid").toString();
 			QString qFileUid = QString(prefs.userid);
@@ -461,14 +479,12 @@ void SubsurfaceWebServices::buttonClicked(QAbstractButton *button)
 				i--; // otherwise we skip one site
 			}
 		}
-#ifndef NO_MARBLE
 		// finally now that all the extra GPS fixes that weren't used have been deleted
-		// we can update the globe
+		// we can update the map
 		if (changed) {
-			GlobeGPS::instance()->repopulateLabels();
-			GlobeGPS::instance()->centerOnDiveSite(get_dive_site_by_uuid(current_dive->dive_site_uuid));
+			MapWidget::instance()->repopulateLabels();
+			MapWidget::instance()->centerOnDiveSite(get_dive_site_by_uuid(current_dive->dive_site_uuid));
 		}
-#endif
 
 	} break;
 	case QDialogButtonBox::RejectRole:
@@ -719,7 +735,6 @@ void DivelogsDeWebServices::prepareDivesForUpload(bool selected)
 	} else {
 		report_error("Failed to create upload file %s\n", qPrintable(filename));
 	}
-	MainWindow::instance()->getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
 }
 
 void DivelogsDeWebServices::uploadDives(QIODevice *dldContent)
@@ -754,6 +769,7 @@ DivelogsDeWebServices::DivelogsDeWebServices(QWidget *parent, Qt::WindowFlags f)
 	multipart(NULL),
 	uploadMode(false)
 {
+	//FIXME: DivelogDE user and pass should be on the prefs struct or something?
 	QSettings s;
 	ui.userID->setText(s.value("divelogde_user").toString());
 	ui.password->setText(s.value("divelogde_pass").toString());
@@ -818,7 +834,7 @@ void DivelogsDeWebServices::startDownload()
 
 	QUrlQuery body;
 	body.addQueryItem("user", ui.userID->text());
-	body.addQueryItem("pass", ui.password->text());
+	body.addQueryItem("pass", ui.password->text().replace("+", "%2b"));
 
 	reply = manager()->post(request, body.query(QUrl::FullyEncoded).toLatin1());
 	connect(reply, SIGNAL(finished()), this, SLOT(listDownloadFinished()));
@@ -855,7 +871,7 @@ void DivelogsDeWebServices::listDownloadFinished()
 
 	QUrlQuery body;
 	body.addQueryItem("user", ui.userID->text());
-	body.addQueryItem("pass", ui.password->text());
+	body.addQueryItem("pass", ui.password->text().replace("+", "%2b"));
 	body.addQueryItem("ids", diveList.idList);
 
 	reply = manager()->post(request, body.query(QUrl::FullyEncoded).toLatin1());
@@ -958,6 +974,7 @@ void DivelogsDeWebServices::uploadFinished()
 
 void DivelogsDeWebServices::setStatusText(int status)
 {
+	Q_UNUSED(status)
 }
 
 void DivelogsDeWebServices::downloadError(QNetworkReply::NetworkError)
@@ -1025,97 +1042,4 @@ QNetworkReply* UserSurveyServices::sendSurvey(QString values)
 	request.setRawHeader("User-Agent", userAgent.toUtf8());
 	reply = manager()->get(request);
 	return reply;
-}
-
-CloudStorageAuthenticate::CloudStorageAuthenticate(QObject *parent) :
-	QObject(parent),
-	reply(NULL)
-{
-	userAgent = getUserAgent();
-}
-
-#define CLOUDURL QString(prefs.cloud_base_url)
-#define CLOUDBACKENDSTORAGE CLOUDURL + "/storage"
-#define CLOUDBACKENDVERIFY CLOUDURL + "/verify"
-#define CLOUDBACKENDUPDATE CLOUDURL + "/update"
-
-QNetworkReply* CloudStorageAuthenticate::backend(QString email, QString password, QString pin, QString newpasswd)
-{
-	QString payload(email + " " + password);
-	QUrl requestUrl;
-	if (pin == "" && newpasswd == "") {
-		requestUrl = QUrl(CLOUDBACKENDSTORAGE);
-	} else if (newpasswd != "") {
-		requestUrl = QUrl(CLOUDBACKENDUPDATE);
-		payload += " " + newpasswd;
-	} else {
-		requestUrl = QUrl(CLOUDBACKENDVERIFY);
-		payload += " " + pin;
-	}
-	QNetworkRequest *request = new QNetworkRequest(requestUrl);
-	request->setRawHeader("Accept", "text/xml, text/plain");
-	request->setRawHeader("User-Agent", userAgent.toUtf8());
-	request->setHeader(QNetworkRequest::ContentTypeHeader, "text/plain");
-	reply = WebServices::manager()->post(*request, qPrintable(payload));
-	connect(reply, SIGNAL(finished()), this, SLOT(uploadFinished()));
-	connect(reply, SIGNAL(sslErrors(QList<QSslError>)), this, SLOT(sslErrors(QList<QSslError>)));
-	connect(reply, SIGNAL(error(QNetworkReply::NetworkError)), this,
-		SLOT(uploadError(QNetworkReply::NetworkError)));
-	return reply;
-}
-
-void CloudStorageAuthenticate::uploadFinished()
-{
-	static QString myLastError;
-
-	QString cloudAuthReply(reply->readAll());
-	qDebug() << "Completed connection with cloud storage backend, response" << cloudAuthReply;
-	if (cloudAuthReply == "[VERIFIED]" || cloudAuthReply == "[OK]") {
-		prefs.cloud_verification_status = CS_VERIFIED;
-		NotificationWidget *nw = MainWindow::instance()->getNotificationWidget();
-		if (nw->getNotificationText() == myLastError)
-			nw->hideNotification();
-		myLastError.clear();
-	} else if (cloudAuthReply == "[VERIFY]") {
-		prefs.cloud_verification_status = CS_NEED_TO_VERIFY;
-	} else if (cloudAuthReply == "[PASSWDCHANGED]") {
-		free(prefs.cloud_storage_password);
-		prefs.cloud_storage_password = prefs.cloud_storage_newpassword;
-		prefs.cloud_storage_newpassword = NULL;
-		emit passwordChangeSuccessful();
-		return;
-	} else {
-		prefs.cloud_verification_status = CS_INCORRECT_USER_PASSWD;
-		myLastError = cloudAuthReply;
-		report_error("%s", qPrintable(cloudAuthReply));
-		MainWindow::instance()->getNotificationWidget()->showNotification(get_error_string(), KMessageWidget::Error);
-	}
-	emit finishedAuthenticate();
-}
-
-void CloudStorageAuthenticate::uploadError(QNetworkReply::NetworkError error)
-{
-	qDebug() << "Received error response from cloud storage backend:" << reply->errorString();
-}
-
-void CloudStorageAuthenticate::sslErrors(QList<QSslError> errorList)
-{
-	if (verbose) {
-		qDebug() << "Received error response trying to set up https connection with cloud storage backend:";
-		Q_FOREACH (QSslError err, errorList) {
-			qDebug() << err.errorString();
-		}
-	}
-	QSslConfiguration conf = reply->sslConfiguration();
-	QSslCertificate cert = conf.peerCertificate();
-	QByteArray hexDigest = cert.digest().toHex();
-	if (reply->url().toString().contains(prefs.cloud_base_url) &&
-	    hexDigest == "13ff44c62996cfa5cd69d6810675490e") {
-		if (verbose)
-			qDebug() << "Overriding SSL check as I recognize the certificate digest" << hexDigest;
-		reply->ignoreSslErrors();
-	} else {
-		if (verbose)
-			qDebug() << "got invalid SSL certificate with hex digest" << hexDigest;
-	}
 }

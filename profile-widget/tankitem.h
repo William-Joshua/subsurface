@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef TANKITEM_H
 #define TANKITEM_H
 
 #include <QGraphicsItem>
 #include <QModelIndex>
 #include <QBrush>
-#include "divelineitem.h"
-#include "divecartesianaxis.h"
-#include "dive.h"
+#include "profile-widget/divelineitem.h"
+#include "profile-widget/divecartesianaxis.h"
+#include "core/dive.h"
 
 class TankItem : public QObject, public QGraphicsRectItem
 {

@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
 #include "preferences_defaults.h"
 #include "ui_preferences_defaults.h"
-#include "dive.h"
-#include "subsurface-core/prefs-macros.h"
+#include "core/dive.h"
+#include "core/prefs-macros.h"
+#include "core/subsurface-qt/SettingsObjectWrapper.h"
 
-#include <QSettings>
 #include <QFileDialog>
 
-PreferencesDefaults::PreferencesDefaults(): AbstractPreferencesWidget(tr("Defaults"), QIcon(":defaults"), 0 ), ui(new Ui::PreferencesDefaults())
+PreferencesDefaults::PreferencesDefaults(): AbstractPreferencesWidget(tr("General"), QIcon(":defaults"), 0 ), ui(new Ui::PreferencesDefaults())
 {
 	ui->setupUi(this);
 }
@@ -19,7 +20,7 @@ PreferencesDefaults::~PreferencesDefaults()
 void PreferencesDefaults::on_chooseFile_clicked()
 {
 	QFileInfo fi(system_default_filename());
-	QString choosenFileName = QFileDialog::getOpenFileName(this, tr("Open default log file"), fi.absolutePath(), tr("Subsurface XML files (*.ssrf *.xml *.XML)"));
+	QString choosenFileName = QFileDialog::getOpenFileName(this, tr("Open default log file"), fi.absolutePath(), tr("Subsurface files") + " (*.ssrf *.xml)");
 
 	if (!choosenFileName.isEmpty())
 		ui->defaultfilename->setText(choosenFileName);
@@ -76,28 +77,22 @@ void PreferencesDefaults::refreshSettings()
 
 void PreferencesDefaults::syncSettings()
 {
-	QSettings s;
-	s.beginGroup("GeneralSettings");
-	s.setValue("default_filename", ui->defaultfilename->text());
-	s.setValue("default_cylinder", ui->default_cylinder->currentText());
-	s.setValue("use_default_file", ui->btnUseDefaultFile->isChecked());
+	auto general = SettingsObjectWrapper::instance()->general_settings;
+	general->setDefaultFilename(ui->defaultfilename->text());
+	general->setDefaultCylinder(ui->default_cylinder->currentText());
+	general->setUseDefaultFile(ui->btnUseDefaultFile->isChecked());
 	if (ui->noDefaultFile->isChecked())
-		s.setValue("default_file_behavior", NO_DEFAULT_FILE);
+		general->setDefaultFileBehavior(NO_DEFAULT_FILE);
 	else if (ui->localDefaultFile->isChecked())
-		s.setValue("default_file_behavior", LOCAL_DEFAULT_FILE);
+		general->setDefaultFileBehavior(LOCAL_DEFAULT_FILE);
 	else if (ui->cloudDefaultFile->isChecked())
-		s.setValue("default_file_behavior", CLOUD_DEFAULT_FILE);
-	s.endGroup();
+		general->setDefaultFileBehavior(CLOUD_DEFAULT_FILE);
 
-	s.beginGroup("Display");
-	SAVE_OR_REMOVE_SPECIAL("divelist_font", system_divelist_default_font, ui->font->currentFont().toString(), ui->font->currentFont());
-	SAVE_OR_REMOVE("font_size", system_divelist_default_font_size, ui->fontsize->value());
-	s.setValue("displayinvalid", ui->displayinvalid->isChecked());
-	s.endGroup();
-	s.sync();
+	auto display =  SettingsObjectWrapper::instance()->display_settings;
+	display->setDivelistFont(ui->font->currentFont().toString());
+	display->setFontSize(ui->fontsize->value());
+	display->setDisplayInvalidDives(ui->displayinvalid->isChecked());
 
-		// Animation
-	s.beginGroup("Animations");
-	s.setValue("animation_speed", ui->velocitySlider->value());
-	s.endGroup();
+	auto animation = SettingsObjectWrapper::instance()->animation_settings;
+	animation->setAnimationSpeed(ui->velocitySlider->value());
 }

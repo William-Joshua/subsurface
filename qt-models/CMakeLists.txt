@@ -11,17 +11,20 @@ set(SUBSURFACE_MODELS_LIB_SRCS
 	weightmodel.cpp
 	divecomputermodel.cpp
 	treemodel.cpp
-	tableprintmodel.cpp
 	yearlystatisticsmodel.cpp
 	divetripmodel.cpp
 	divecomputerextradatamodel.cpp
 	completionmodels.cpp
-	profileprintmodel.cpp
 	divepicturemodel.cpp
 	diveplotdatamodel.cpp
 	divelocationmodel.cpp
 	divesitepicturesmodel.cpp
 	ssrfsortfilterproxymodel.cpp
+	divelistmodel.cpp
+	gpslistmodel.cpp
+	diveimportedmodel.cpp
+	messagehandlermodel.cpp
+	maplocationmodel.cpp
 )
 
 source_group("Subsurface Models" FILES ${SUBSURFACE_MODELS})

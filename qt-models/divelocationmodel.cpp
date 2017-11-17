@@ -1,9 +1,11 @@
-#include "units.h"
-#include "divelocationmodel.h"
-#include "dive.h"
+// SPDX-License-Identifier: GPL-2.0
+#include "core/units.h"
+#include "qt-models/divelocationmodel.h"
+#include "core/dive.h"
 #include <QDebug>
 #include <QLineEdit>
 #include <QIcon>
+#include <core/gettextfromc.h>
 
 bool dive_site_less_than(dive_site *a, dive_site *b)
 {
@@ -24,6 +26,7 @@ LocationInformationModel::LocationInformationModel(QObject *obj) : QAbstractTabl
 
 int LocationInformationModel::columnCount(const QModelIndex &parent) const
 {
+	Q_UNUSED(parent);
 	return COLUMNS;
 }
 
@@ -159,6 +162,8 @@ bool LocationInformationModel::setData(const QModelIndex &index, const QVariant 
 
 bool LocationInformationModel::removeRows(int row, int count, const QModelIndex & parent)
 {
+	Q_UNUSED(count);
+	Q_UNUSED(parent);
 	if(row >= rowCount())
 		return false;
 
@@ -181,7 +186,7 @@ GeoReferencingOptionsModel::GeoReferencingOptionsModel(QObject *parent) : QStrin
 	QStringList list;
 	int i;
 	for (i = 0; i < TC_NR_CATEGORIES; i++)
-		list << taxonomy_category_names[i];
+		list << gettextFromC::instance()->trGettext(taxonomy_category_names[i]);
 	setStringList(list);
 }
 

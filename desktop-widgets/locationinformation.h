@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef LOCATIONINFORMATION_H
 #define LOCATIONINFORMATION_H
 
@@ -23,6 +24,7 @@ public slots:
 	void enableEdition();
 	void resetState();
 	void resetPallete();
+	void on_diveSiteCountry_textChanged(const QString& text);
 	void on_diveSiteCoordinates_textChanged(const QString& text);
 	void on_diveSiteDescription_textChanged(const QString& text);
 	void on_diveSiteName_textChanged(const QString& text);
@@ -41,6 +43,7 @@ signals:
 	void endRequestCoordinates();
 
 private:
+	void clearLabels();
 	Ui::LocationInformation ui;
 	bool modified;
 	QAction *acceptAction, *rejectAction;

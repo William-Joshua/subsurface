@@ -1,15 +1,16 @@
+// SPDX-License-Identifier: GPL-2.0
 #include <QShortcut>
 #include <QMessageBox>
 #include <QSettings>
 
-#include "usersurvey.h"
+#include "desktop-widgets/usersurvey.h"
 #include "ui_usersurvey.h"
-#include "version.h"
-#include "subsurfacewebservices.h"
-#include "updatemanager.h"
+#include "core/version.h"
+#include "desktop-widgets/subsurfacewebservices.h"
+#include "desktop-widgets/updatemanager.h"
 
-#include "helpers.h"
-#include "subsurfacesysinfo.h"
+#include "core/helpers.h"
+#include "core/subsurfacesysinfo.h"
 
 UserSurvey::UserSurvey(QWidget *parent) : QDialog(parent),
 	ui(new Ui::UserSurvey)
@@ -22,7 +23,7 @@ UserSurvey::UserSurvey(QWidget *parent) : QDialog(parent),
 	QShortcut *quitKey = new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_Q), this);
 	connect(quitKey, SIGNAL(activated()), parent, SLOT(close()));
 
-	os = QString("ssrfVers=%1").arg(subsurface_version());
+	os = QString("ssrfVers=%1").arg(subsurface_canonical_version());
 	os.append(QString("&prettyOsName=%1").arg(SubsurfaceSysInfo::prettyOsName()));
 	QString arch = SubsurfaceSysInfo::buildCpuArchitecture();
 	os.append(QString("&appCpuArch=%1").arg(arch));
@@ -31,7 +32,7 @@ UserSurvey::UserSurvey(QWidget *parent) : QDialog(parent),
 		os.append(QString("&osCpuArch=%1").arg(osArch));
 	}
 	os.append(QString("&uiLang=%1").arg(uiLanguage(NULL)));
-	os.append(QString("&uuid=%1").arg(UpdateManager::getUUID()));
+	os.append(QString("&uuid=%1").arg(getUUID()));
 	ui->system->setPlainText(getVersion());
 }
 
@@ -39,7 +40,7 @@ QString UserSurvey::getVersion()
 {
 	QString arch;
 	// fill in the system data
-	QString sysInfo = QString("Subsurface %1").arg(subsurface_version());
+	QString sysInfo = QString("Subsurface %1").arg(subsurface_canonical_version());
 	sysInfo.append(tr("\nOperating system: %1").arg(SubsurfaceSysInfo::prettyOsName()));
 	arch = SubsurfaceSysInfo::buildCpuArchitecture();
 	sysInfo.append(tr("\nCPU architecture: %1").arg(arch));

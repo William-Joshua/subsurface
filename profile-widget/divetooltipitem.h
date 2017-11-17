@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef DIVETOOLTIPITEM_H
 #define DIVETOOLTIPITEM_H
 
@@ -7,13 +8,12 @@
 #include <QRectF>
 #include <QIcon>
 #include <QTime>
-#include "display.h"
+#include "core/display.h"
 
 class DiveCartesianAxis;
 class QGraphicsLineItem;
 class QGraphicsSimpleTextItem;
 class QGraphicsPixmapItem;
-struct graphics_context;
 
 /* To use a tooltip, simply ->setToolTip on the QGraphicsItem that you want
  * or, if it's a "global" tooltip, set it on the mouseMoveEvent of the ProfileGraphicsView.
